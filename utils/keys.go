@@ -3,20 +3,20 @@ package utils
 import "github.com/charmbracelet/bubbles/key"
 
 type KeyMap struct {
-	Up            key.Binding
-	Down          key.Binding
-	PageDown      key.Binding
-	PageUp        key.Binding
-	NextTab       key.Binding
-	PrevTab       key.Binding
-	TogglePreview key.Binding
-	OpenGithub    key.Binding
-	SwitchView    key.Binding
-	Refresh       key.Binding
-	Help          key.Binding
-	Quit          key.Binding
-	Search        key.Binding
-	FocusInput    key.Binding
+	Up         key.Binding
+	Down       key.Binding
+	PageDown   key.Binding
+	PageUp     key.Binding
+	NextTab    key.Binding
+	PrevTab    key.Binding
+	Copy       key.Binding
+	OpenGithub key.Binding
+	SwitchView key.Binding
+	Refresh    key.Binding
+	Help       key.Binding
+	Quit       key.Binding
+	Search     key.Binding
+	FocusInput key.Binding
 }
 
 func (k KeyMap) ShortHelp() []key.Binding {
@@ -27,7 +27,7 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down},
 		{k.PrevTab, k.NextTab},
-		{k.TogglePreview, k.OpenGithub},
+		{k.Copy, k.OpenGithub},
 		{k.Help, k.Quit},
 	}
 }
@@ -57,9 +57,9 @@ var Keys = KeyMap{
 		key.WithKeys("ctrl+d"),
 		key.WithHelp("ctrl+d", "preview page down"),
 	),
-	TogglePreview: key.NewBinding(
-		key.WithKeys("p"),
-		key.WithHelp("p", "open in Preview"),
+	Copy: key.NewBinding(
+		key.WithKeys("c"),
+		key.WithHelp("c", "copy to clipboard"),
 	),
 	OpenGithub: key.NewBinding(
 		key.WithKeys("o"),

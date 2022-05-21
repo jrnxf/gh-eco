@@ -1,47 +1,59 @@
 package ui
 
 import (
-	"encoding/json"
-	"fmt"
-	"strings"
-
 	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/glamour"
+	"github.com/charmbracelet/lipgloss"
 
-	"github.com/coloradocolby/ghx/api"
+	"github.com/atotto/clipboard"
 	"github.com/coloradocolby/ghx/ui/components/pager"
-	"github.com/coloradocolby/ghx/ui/components/spinner"
+	"github.com/coloradocolby/ghx/ui/components/search"
 	"github.com/coloradocolby/ghx/ui/components/tabs"
-	"github.com/coloradocolby/ghx/ui/components/textinput"
+	"github.com/coloradocolby/ghx/ui/components/user"
 	"github.com/coloradocolby/ghx/ui/context"
 	"github.com/coloradocolby/ghx/utils"
 )
 
+var (
+	// colors
+	subtle    = lipgloss.AdaptiveColor{Light: "#D9DCCF", Dark: "#383838"}
+	highlight = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#7D56F4"}
+	special   = lipgloss.AdaptiveColor{Light: "#43BF6D", Dark: "#73F59F"}
+)
+
+var (
+	bold = lipgloss.NewStyle().
+		Bold(true)
+	boldActive = lipgloss.NewStyle().Foreground(highlight).
+			Bold(true)
+)
+
 type Model struct {
-	keys          utils.KeyMap
-	err           error
-	tabs          tabs.Model
-	textInput     textinput.Model
-	pager         pager.Model
-	spinner       spinner.Model
-	ctx           context.ProgramContext
-	displayedUser api.User
-	fetching      bool
+	keys     utils.KeyMap
+	err      error
+	tabs     tabs.Model
+	search   search.Model
+	pager    pager.Model
+	user     user.Model
+	ctx      context.ProgramContext
+	focusIdx int
 }
 
 func New() Model {
 	m := Model{
-		keys:          utils.Keys,
-		tabs:          tabs.NewModel(),
-		textInput:     textinput.NewModel(),
-		spinner:       spinner.NewModel(),
-		pager:         pager.NewModel(),
-		displayedUser: api.User{},
+		keys:   utils.Keys,
+		tabs:   tabs.NewModel(),
+		search: search.NewModel(),
+		pager:  pager.NewModel(),
+		user:   user.NewModel(),
 		ctx: context.ProgramContext{
 			Mode: context.InsertMode,
+			FocusableWidgets: context.FocusableWidgets{
+				Search: context.FocusableWidgetState{},
+			},
 		},
-		fetching: false,
+		focusIdx: 0,
 	}
 
 	return m
@@ -58,18 +70,18 @@ func initScreen() tea.Msg {
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		initScreen,
-		m.spinner.Tick,
+		textinput.Blink,
 	)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var (
-		cmd           tea.Cmd
-		spinnerCmd    tea.Cmd
-		pagerCmd      tea.Cmd
-		textInputCmd  tea.Cmd
-		searchUserCmd tea.Cmd
-		cmds          []tea.Cmd
+		cmd        tea.Cmd
+		spinnerCmd tea.Cmd
+		pagerCmd   tea.Cmd
+		searchCmd  tea.Cmd
+		userCmd    tea.Cmd
+		cmds       []tea.Cmd
 	)
 
 	switch msg := msg.(type) {
@@ -78,54 +90,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmd = tea.Quit
 		}
 		switch m.ctx.Mode {
-		case context.InsertMode:
-			switch {
-			case key.Matches(msg, m.keys.Search):
-				m.ctx.Mode = context.NormalMode
-
-				m.fetching = true
-				searchUserCmd = api.SearchUser(m.textInput.TextInput.Value())
-			}
-
-			m.textInput, textInputCmd = m.textInput.Update(msg)
-
 		case context.NormalMode:
 			switch {
-			case key.Matches(msg, m.keys.FocusInput):
-				// m.textInput.TextInput.Reset()
-				m.ctx.Mode = context.InsertMode
+			case key.Matches(msg, m.keys.Down):
+				m.SetFocus(m.focusIdx + 1)
+			case key.Matches(msg, m.keys.Up):
+				m.SetFocus(m.focusIdx - 1)
 			case key.Matches(msg, m.keys.PrevTab):
 				m.tabs.PrevTab()
 			case key.Matches(msg, m.keys.NextTab):
 				m.tabs.NextTab()
+			case key.Matches(msg, m.keys.Copy):
+				m.copyActiveWidgetToClipboard()
 			}
-
-		}
-	case api.SearchUserResponse:
-		m.fetching = false
-		m.displayedUser = msg.User
-
-		if m.displayedUser.Login != "" {
-			// s := strings.Builder{}
-			// s.WriteString(fmt.Sprintf("Login: %s\n", m.displayedUser.Login))
-			// s.WriteString(fmt.Sprintf("Name: %s\n", m.displayedUser.Name))
-			// s.WriteString(fmt.Sprintf("Location: %s\n", m.displayedUser.Location))
-			// s.WriteString(fmt.Sprintf("Bio: %s\n", m.displayedUser.Bio))
-			// s.WriteString(fmt.Sprintf("Company: %s\n", m.displayedUser.Company))
-			// m.pager.Viewport.SetContent(s.String())
-
-			userJson, _ := json.MarshalIndent(m.displayedUser, "", "    ")
-			md := fmt.Sprintf("\n# %s\n%s\n```json\n%s\n```", m.displayedUser.Name, m.displayedUser.WebsiteUrl, string(userJson))
-			out, _ := glamour.Render(md, "dark")
-			m.pager.Viewport.SetContent(out)
 		}
 
 	}
+
 	m.syncProgramContext()
 
+	m.search, searchCmd = m.search.Update(msg)
 	m.pager, pagerCmd = m.pager.Update(msg)
-	m.spinner, spinnerCmd = m.spinner.Update(msg)
-	cmds = append(cmds, cmd, pagerCmd, spinnerCmd, textInputCmd, searchUserCmd)
+	m.user, userCmd = m.user.Update(msg)
+	cmds = append(cmds, cmd, pagerCmd, spinnerCmd, searchCmd, userCmd)
 	return m, tea.Batch(cmds...)
 }
 
@@ -134,17 +121,70 @@ func (m Model) View() string {
 		return m.err.Error()
 	}
 
-	s := strings.Builder{}
-	if m.fetching {
-		s.WriteString(fmt.Sprintf("%s %s\n", m.textInput.View(), m.spinner.View()))
-	} else {
-		s.WriteString(m.textInput.View() + "\n")
-	}
+	// iter := 1
 
-	s.WriteString(m.pager.View())
-	return s.String()
+	// log.Println("__login")
+	// login := Widget{
+	// 	focusable: true,
+	// 	isActive:  true,
+	// }
+	// log.Println("__login2")
+
+	// login.display = boldActive.Render(m.displayedUser.Login)
+	// // iter++
+	// log.Println("__name")
+
+	// name := Widget{
+	// 	focusable: true,
+	// 	isActive:  true,
+	// 	display:   boldActive.Render(m.displayedUser.Name),
+	// }
+	// // iter++
+	// log.Println("__location")
+
+	// location := Widget{
+	// 	focusable: true,
+	// 	isActive:  true,
+	// 	display:   boldActive.Render(m.displayedUser.Location),
+	// }
+
+	// m.widgets = append(m.widgets, search, login, name, location)
+	// m.widgets = append(m.widgets, search)
+
+	// var activeWidget Widget
+
+	// for _, value := range m.widgets {
+	// 	if value.isActive {
+	// 		activeWidget = value
+	// 		break
+	// 	}
+	// }
+
+	return lipgloss.JoinVertical(lipgloss.Left,
+		m.search.View(),
+		m.user.View(),
+	)
+}
+
+func (m *Model) SetFocus(newIdx int) {
+	m.focusIdx = newIdx
 }
 
 func (m *Model) syncProgramContext() {
 	m.pager.UpdateProgramContext(&m.ctx)
+	m.search.UpdateProgramContext(&m.ctx)
+}
+
+func (m Model) copyActiveWidgetToClipboard() {
+	clipboard.WriteAll("todo")
+	// fmt.Println(len(m.widgets))
+	// for _, value := range m.widgets {
+	// 	if value.isActive {
+	// 		if err := clipboard.WriteAll("colby"); err != nil {
+	// 			panic(err)
+	// 		}
+	// 		os.Exit(0)
+	// 		break
+	// 	}
+	// }
 }

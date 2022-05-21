@@ -31,6 +31,7 @@ type User struct {
 	PinnedItems               struct {
 		Nodes []struct {
 			Repo struct {
+				Id             string
 				Name           string
 				StargazerCount int
 				Url            string
@@ -48,6 +49,15 @@ type SearchUserResponse struct {
 	User User
 }
 
+// mutation MyMutation {
+// 	removeStar(input: {starrableId: "R_kgDOGuzvkw"}) {
+// 	  starrable {
+// 		viewerHasStarred
+// 		stargazerCount
+// 	  }
+// 	}
+//   }
+
 func SearchUser(login string) tea.Cmd {
 	return func() tea.Msg {
 		client, err := gh.GQLClient(nil)
@@ -63,12 +73,13 @@ func SearchUser(login string) tea.Cmd {
 			"login": graphql.String(login),
 			"first": graphql.Int(3),
 		}
+		log.Println("Searching for ", login)
 		err = client.Query("SearchUser", &query, variables)
 		if err != nil {
 			log.Fatal(err)
 			return SearchUserResponse{Err: err}
 		}
-
+		log.Println("Found ", query.User.Name)
 		return SearchUserResponse{User: query.User}
 	}
 
