@@ -38,6 +38,18 @@ type User struct {
 			} `graphql:"... on Repository"`
 		}
 	} `graphql:"pinnedItems(first: $first)"`
+	ContributionsCollection struct {
+		ContributionCalendar struct {
+			TotalContributions int
+			Weeks              []WeeklyContribution
+		}
+	}
+}
+
+type WeeklyContribution struct {
+	ContributionDays []struct {
+		ContributionLevel string
+	}
 }
 
 type TotalCount struct {
@@ -71,7 +83,7 @@ func SearchUser(login string) tea.Cmd {
 
 		variables := map[string]interface{}{
 			"login": graphql.String(login),
-			"first": graphql.Int(3),
+			"first": graphql.Int(6),
 		}
 		log.Println("Searching for ", login)
 		err = client.Query("SearchUser", &query, variables)

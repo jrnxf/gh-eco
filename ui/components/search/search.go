@@ -25,6 +25,9 @@ func NewModel() Model {
 	ti := textinput.NewModel()
 	ti.Focus()
 
+	// to save during dev time start with my username
+	// ti.SetValue("coloradocolby")
+
 	return Model{
 		keys:      utils.Keys,
 		textInput: ti,
@@ -76,7 +79,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.fetching = false
 	}
 
-	m.textInput, textInputCmd = m.textInput.Update(msg)
+	if m.ctx.Mode != context.NormalMode {
+		m.textInput, textInputCmd = m.textInput.Update(msg)
+	}
+
 	m.spinner, spinnerCmd = m.spinner.Update(msg)
 	cmds = append(cmds, cmd, spinnerCmd, textInputCmd, searchUserCmd)
 	return m, tea.Batch(cmds...)

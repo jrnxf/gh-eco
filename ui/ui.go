@@ -105,6 +105,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+		// when doing paging
+		// case api.SearchUserResponse:
+		// 	val, _ := json.MarshalIndent(msg.User, "", "    ")
+		// 	in := "```json\n" + string(val) + "\n```"
+		// 	out, _ := glamour.Render(in, "dark")
+		// 	m.pager.Viewport.SetContent(out)
+
 	}
 
 	m.syncProgramContext()
@@ -121,49 +128,23 @@ func (m Model) View() string {
 		return m.err.Error()
 	}
 
-	// iter := 1
-
-	// log.Println("__login")
-	// login := Widget{
-	// 	focusable: true,
-	// 	isActive:  true,
-	// }
-	// log.Println("__login2")
-
-	// login.display = boldActive.Render(m.displayedUser.Login)
-	// // iter++
-	// log.Println("__name")
-
-	// name := Widget{
-	// 	focusable: true,
-	// 	isActive:  true,
-	// 	display:   boldActive.Render(m.displayedUser.Name),
-	// }
-	// // iter++
-	// log.Println("__location")
-
-	// location := Widget{
-	// 	focusable: true,
-	// 	isActive:  true,
-	// 	display:   boldActive.Render(m.displayedUser.Location),
-	// }
-
-	// m.widgets = append(m.widgets, search, login, name, location)
-	// m.widgets = append(m.widgets, search)
-
-	// var activeWidget Widget
-
-	// for _, value := range m.widgets {
-	// 	if value.isActive {
-	// 		activeWidget = value
-	// 		break
-	// 	}
+	// When doing paging
+	// if m.user.User.Login != "" {
+	// 	return lipgloss.JoinVertical(lipgloss.Left,
+	// 		m.search.View(),
+	// 		m.pager.View(),
+	// 	)
+	// } else {
+	// 	return lipgloss.JoinVertical(lipgloss.Left,
+	// 		m.search.View(),
+	// 	)
 	// }
 
 	return lipgloss.JoinVertical(lipgloss.Left,
 		m.search.View(),
 		m.user.View(),
 	)
+
 }
 
 func (m *Model) SetFocus(newIdx int) {
@@ -188,3 +169,42 @@ func (m Model) copyActiveWidgetToClipboard() {
 	// 	}
 	// }
 }
+
+// iter := 1
+
+// log.Println("__login")
+// login := Widget{
+// 	focusable: true,
+// 	isActive:  true,
+// }
+// log.Println("__login2")
+
+// login.display = boldActive.Render(m.displayedUser.Login)
+// // iter++
+// log.Println("__name")
+
+// name := Widget{
+// 	focusable: true,
+// 	isActive:  true,
+// 	display:   boldActive.Render(m.displayedUser.Name),
+// }
+// // iter++
+// log.Println("__location")
+
+// location := Widget{
+// 	focusable: true,
+// 	isActive:  true,
+// 	display:   boldActive.Render(m.displayedUser.Location),
+// }
+
+// m.widgets = append(m.widgets, search, login, name, location)
+// m.widgets = append(m.widgets, search)
+
+// var activeWidget Widget
+
+// for _, value := range m.widgets {
+// 	if value.isActive {
+// 		activeWidget = value
+// 		break
+// 	}
+// }
