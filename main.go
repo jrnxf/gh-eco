@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 
 	"github.com/coloradocolby/ghx/ui"
 
@@ -12,7 +13,9 @@ import (
 
 func main() {
 
-	f, err := tea.LogToFile("debug.log", "debug")
+	f, err := tea.LogToFile("debug.log", "")
+	// clear the file each run
+	exec.Command("/bin/bash", "-c", "echo > debug.log").Run()
 
 	if err != nil {
 		fmt.Println("fatal:", err)

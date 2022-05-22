@@ -30,12 +30,7 @@ type User struct {
 	Following                 TotalCount
 	PinnedItems               struct {
 		Nodes []struct {
-			Repo struct {
-				Id             string
-				Name           string
-				StargazerCount int
-				Url            string
-			} `graphql:"... on Repository"`
+			Repo Repo `graphql:"... on Repository"`
 		}
 	} `graphql:"pinnedItems(first: $first)"`
 	ContributionsCollection struct {
@@ -43,6 +38,18 @@ type User struct {
 			TotalContributions int
 			Weeks              []WeeklyContribution
 		}
+	}
+}
+
+type Repo struct {
+	Id              string
+	Name            string
+	Description     string
+	StargazerCount  int
+	Url             string
+	PrimaryLanguage struct {
+		Name  string
+		Color string
 	}
 }
 
@@ -85,13 +92,13 @@ func SearchUser(login string) tea.Cmd {
 			"login": graphql.String(login),
 			"first": graphql.Int(6),
 		}
-		log.Println("Searching for ", login)
+		log.Println("searching for", login)
 		err = client.Query("SearchUser", &query, variables)
 		if err != nil {
-			log.Fatal(err)
+			log.Println(err)
 			return SearchUserResponse{Err: err}
 		}
-		log.Println("Found ", query.User.Name)
+		log.Println("found ", query.User.Name)
 		return SearchUserResponse{User: query.User}
 	}
 

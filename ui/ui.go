@@ -9,7 +9,6 @@ import (
 	"github.com/atotto/clipboard"
 	"github.com/coloradocolby/ghx/ui/components/pager"
 	"github.com/coloradocolby/ghx/ui/components/search"
-	"github.com/coloradocolby/ghx/ui/components/tabs"
 	"github.com/coloradocolby/ghx/ui/components/user"
 	"github.com/coloradocolby/ghx/ui/context"
 	"github.com/coloradocolby/ghx/utils"
@@ -22,17 +21,9 @@ var (
 	special   = lipgloss.AdaptiveColor{Light: "#43BF6D", Dark: "#73F59F"}
 )
 
-var (
-	bold = lipgloss.NewStyle().
-		Bold(true)
-	boldActive = lipgloss.NewStyle().Foreground(highlight).
-			Bold(true)
-)
-
 type Model struct {
 	keys     utils.KeyMap
 	err      error
-	tabs     tabs.Model
 	search   search.Model
 	pager    pager.Model
 	user     user.Model
@@ -43,7 +34,6 @@ type Model struct {
 func New() Model {
 	m := Model{
 		keys:   utils.Keys,
-		tabs:   tabs.NewModel(),
 		search: search.NewModel(),
 		pager:  pager.NewModel(),
 		user:   user.NewModel(),
@@ -96,10 +86,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.SetFocus(m.focusIdx + 1)
 			case key.Matches(msg, m.keys.Up):
 				m.SetFocus(m.focusIdx - 1)
-			case key.Matches(msg, m.keys.PrevTab):
-				m.tabs.PrevTab()
-			case key.Matches(msg, m.keys.NextTab):
-				m.tabs.NextTab()
 			case key.Matches(msg, m.keys.Copy):
 				m.copyActiveWidgetToClipboard()
 			}

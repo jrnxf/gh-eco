@@ -2,7 +2,6 @@ package pager
 
 import (
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/coloradocolby/ghx/ui/context"
@@ -94,7 +93,6 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		if m.ctx.Mode == context.NormalMode {
-			log.Println("listening")
 			// only listen for keyboard events if in normal mode
 			m.Viewport, cmd = m.Viewport.Update(msg)
 		}

@@ -2,10 +2,12 @@ package search
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/coloradocolby/ghx/api"
 	"github.com/coloradocolby/ghx/ui/components/spinner"
 	"github.com/coloradocolby/ghx/ui/context"
@@ -89,11 +91,16 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
+	var b strings.Builder
+	w := b.WriteString
+
 	if m.fetching {
-		return fmt.Sprintf("%s%s\n", m.textInput.View(), m.spinner.View())
+		w(fmt.Sprintf("%s%s", m.textInput.View(), m.spinner.View()))
 	} else {
-		return m.textInput.View() + "\n"
+		w(m.textInput.View())
 	}
+
+	return lipgloss.NewStyle().Padding(1).Render(b.String())
 }
 
 func (m *Model) UpdateProgramContext(ctx *context.ProgramContext) {

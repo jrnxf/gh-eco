@@ -1,16 +1,12 @@
-package utils
+package graph
 
 import (
-	"log"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/coloradocolby/ghx/api"
 )
 
-func ConvertWeeklyContributionsToGraph(weeklyContributions []api.WeeklyContribution) string {
-	log.Println("start")
-
+func BuildGraphDisplay(weeklyContributions []api.WeeklyContribution) string {
 	// prep the finished matrix
 	result := make([][]string, len(weeklyContributions))
 	for i := range result {
@@ -47,34 +43,25 @@ func transposeSlice(slice [][]string) [][]string {
 }
 
 func generateContributionGraph(slice [][]string) string {
-	var (
-		none           = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#2D333B", Dark: "#2D333B"}).Render("■ ")
-		firstQuartile  = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#0E4429", Dark: "#0E4429"}).Render("■ ")
-		secondQuartile = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#006D32", Dark: "#006D32"}).Render("■ ")
-		thirdQuartile  = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#26A641", Dark: "#26A641"}).Render("■ ")
-		fourthQuartile = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#39D353", Dark: "#39D353"}).Render("■ ")
-	)
-
 	var b strings.Builder
 
 	for _, row := range slice {
 		for _, cell := range row {
 			switch cell {
 			case "NONE":
-				b.WriteString(none)
+				b.WriteString(graphCellNone)
 			case "FIRST_QUARTILE":
-				b.WriteString(firstQuartile)
+				b.WriteString(graphCellFirstQuartile)
 			case "SECOND_QUARTILE":
-				b.WriteString(secondQuartile)
+				b.WriteString(graphCellSecondQuartile)
 			case "THIRD_QUARTILE":
-				b.WriteString(thirdQuartile)
+				b.WriteString(graphCellThirdQuartile)
 			case "FOURTH_QUARTILE":
-				b.WriteString(fourthQuartile)
+				b.WriteString(graphCellFourthQuartile)
 			}
 		}
 		b.WriteString("\n")
 	}
-	log.Println("end")
 
 	return b.String()
 }
