@@ -3,7 +3,7 @@ package graph
 import (
 	"strings"
 
-	"github.com/coloradocolby/ghx/api"
+	"github.com/coloradocolby/gh-eco/api"
 )
 
 func BuildGraphDisplay(weeklyContributions []api.WeeklyContribution) string {

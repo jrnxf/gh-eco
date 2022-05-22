@@ -8,10 +8,10 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/coloradocolby/ghx/api"
-	"github.com/coloradocolby/ghx/ui/components/spinner"
-	"github.com/coloradocolby/ghx/ui/context"
-	"github.com/coloradocolby/ghx/utils"
+	"github.com/coloradocolby/gh-eco/api"
+	"github.com/coloradocolby/gh-eco/ui/components/spinner"
+	"github.com/coloradocolby/gh-eco/ui/context"
+	"github.com/coloradocolby/gh-eco/utils"
 )
 
 type Model struct {

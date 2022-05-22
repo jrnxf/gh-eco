@@ -6,7 +6,7 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/coloradocolby/ghx/ui"
+	"github.com/coloradocolby/gh-eco/ui"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

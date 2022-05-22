@@ -7,11 +7,11 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/atotto/clipboard"
-	"github.com/coloradocolby/ghx/ui/components/pager"
-	"github.com/coloradocolby/ghx/ui/components/search"
-	"github.com/coloradocolby/ghx/ui/components/user"
-	"github.com/coloradocolby/ghx/ui/context"
-	"github.com/coloradocolby/ghx/utils"
+	"github.com/coloradocolby/gh-eco/ui/components/pager"
+	"github.com/coloradocolby/gh-eco/ui/components/search"
+	"github.com/coloradocolby/gh-eco/ui/components/user"
+	"github.com/coloradocolby/gh-eco/ui/context"
+	"github.com/coloradocolby/gh-eco/utils"
 )
 
 var (

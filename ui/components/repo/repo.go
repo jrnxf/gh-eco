@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/coloradocolby/ghx/api"
-	"github.com/coloradocolby/ghx/ui/styles"
+	"github.com/coloradocolby/gh-eco/api"
+	"github.com/coloradocolby/gh-eco/ui/styles"
 )
 
 func buildRepoDisplay(repo api.Repo, width int) string {

@@ -1,3 +1,3 @@
-# ghx
+# gh-eco
 
-🔭 A GitHub (`gh`) CLI extension to explore the community.
+🦎 github cli (gh) extension to explore the ecosystem

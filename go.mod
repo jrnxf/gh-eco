@@ -1,4 +1,4 @@
-module github.com/coloradocolby/ghx
+module github.com/coloradocolby/gh-eco
 
 go 1.17
 

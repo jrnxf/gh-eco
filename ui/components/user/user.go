@@ -7,9 +7,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/coloradocolby/ghx/api"
-	"github.com/coloradocolby/ghx/ui/components/graph"
-	"github.com/coloradocolby/ghx/ui/components/repo"
+	"github.com/coloradocolby/gh-eco/api"
+	"github.com/coloradocolby/gh-eco/ui/components/graph"
+	"github.com/coloradocolby/gh-eco/ui/components/repo"
 	"golang.org/x/term"
 )
 
