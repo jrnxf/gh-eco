@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/coloradocolby/gh-eco/api"
+	"github.com/coloradocolby/gh-eco/utils"
 )
 
 func BuildGraphDisplay(weeklyContributions []api.WeeklyContribution) string {
@@ -49,15 +50,15 @@ func generateContributionGraph(slice [][]string) string {
 		for _, cell := range row {
 			switch cell {
 			case "NONE":
-				b.WriteString(graphCellNone)
+				b.WriteString(graphCellNone.Render(utils.GH_GRAPH_CELL))
 			case "FIRST_QUARTILE":
-				b.WriteString(graphCellFirstQuartile)
+				b.WriteString(graphCellFirstQuartile.Render(utils.GH_GRAPH_CELL))
 			case "SECOND_QUARTILE":
-				b.WriteString(graphCellSecondQuartile)
+				b.WriteString(graphCellSecondQuartile.Render(utils.GH_GRAPH_CELL))
 			case "THIRD_QUARTILE":
-				b.WriteString(graphCellThirdQuartile)
+				b.WriteString(graphCellThirdQuartile.Render(utils.GH_GRAPH_CELL))
 			case "FOURTH_QUARTILE":
-				b.WriteString(graphCellFourthQuartile)
+				b.WriteString(graphCellFourthQuartile.Render(utils.GH_GRAPH_CELL))
 			}
 		}
 		b.WriteString("\n")

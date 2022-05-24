@@ -28,7 +28,7 @@ func NewModel() Model {
 	ti.Focus()
 
 	// to save during dev time start with my username
-	// ti.SetValue("coloradocolby")
+	ti.SetValue("coloradocolby")
 
 	return Model{
 		keys:      utils.Keys,
@@ -85,7 +85,12 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.textInput, textInputCmd = m.textInput.Update(msg)
 	}
 
-	m.spinner, spinnerCmd = m.spinner.Update(msg)
+	if m.fetching {
+		// by not sending updates to it i effectively stop the spinner and cut useless
+		// re-renders in the top level update (in ui.go)
+		m.spinner, spinnerCmd = m.spinner.Update(msg)
+	}
+
 	cmds = append(cmds, cmd, spinnerCmd, textInputCmd, searchUserCmd)
 	return m, tea.Batch(cmds...)
 }

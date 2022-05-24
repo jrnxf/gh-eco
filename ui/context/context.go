@@ -7,9 +7,8 @@ const (
 	NormalMode
 )
 
-type FocusableWidgetState struct {
-	isActive bool
-	display  string
+type FocusableWidget struct {
+	Name string
 }
 
 type ProgramContext struct {
@@ -18,9 +17,13 @@ type ProgramContext struct {
 	ContentHeight    int
 	ContentWidth     int
 	Mode             Mode
-	FocusableWidgets FocusableWidgets
+	FocusableWidgets []FocusableWidget
+	CurrentFocus     CurrentFocus
 }
 
-type FocusableWidgets struct {
-	Search FocusableWidgetState
+type CurrentFocus struct {
+	FocusIdx      int
+	FocusedWidget FocusableWidget
 }
+
+type FocusChange struct{}

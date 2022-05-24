@@ -10,22 +10,16 @@ import (
 	"github.com/coloradocolby/gh-eco/api"
 	"github.com/coloradocolby/gh-eco/ui/components/graph"
 	"github.com/coloradocolby/gh-eco/ui/components/repo"
+	"github.com/coloradocolby/gh-eco/ui/context"
+	"github.com/coloradocolby/gh-eco/ui/styles"
 	"golang.org/x/term"
-)
-
-var (
-	// colors
-	subtleC    = lipgloss.Color("#768390")
-	highlightC = lipgloss.Color("#81A1C1")
-	subtle     = lipgloss.NewStyle().Foreground(subtleC).Render
-	// highlight = lipgloss.NewStyle().Bold(true).Background(highlightC).Foreground(subtleC).PaddingLeft(1).PaddingRight(1).Render
-	bold = lipgloss.NewStyle().Bold(true).Render
 )
 
 type Model struct {
 	User    api.User
 	display string
 	err     error
+	ctx     *context.ProgramContext
 }
 
 func NewModel() Model {
@@ -47,6 +41,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.err = nil
 		}
 		m.buildDisplay()
+	case context.FocusChange:
+		// log.Println(m.ctx.CurrentFocus)
+		m.buildDisplay()
 	}
 
 	return m, cmd
@@ -58,16 +55,26 @@ func (m Model) buildUserDisplay() string {
 	var b strings.Builder
 	w := b.WriteString
 
-	w(bold(u.Name) + "\n\n")
+	if m.ctx.CurrentFocus.FocusedWidget.Name == "UserDisplay" {
+		w(styles.FocusedBold.Render(u.Name) + "\n\n")
+	} else {
+		w(styles.Bold.Render(u.Name) + "\n\n")
+	}
 
-	w(subtle(u.Bio) + "\n\n")
+	w(styles.Subtle.Render(u.Bio) + "\n\n")
 
 	w(fmt.Sprintf("%v %v · %v %v\n\n", u.Followers.TotalCount, "followers", u.Following.TotalCount, "following"))
 
 	w(fmt.Sprintf("%v  |  %v  |  @%v", u.Location, u.WebsiteUrl, u.TwitterUsername))
 
-	return b.String()
+	m.ctx.FocusableWidgets = append(m.ctx.FocusableWidgets, context.FocusableWidget{Name: "UserDisplay"})
+	// if m.ctx.CurrentFocus.FocusedWidget.Name == "UserDisplay" {
+	// 	return styles.FocusedFrame.Copy().Align(lipgloss.Center).Render(b.String())
 
+	// } else {
+	// 	return styles.Frame.Copy().Align(lipgloss.Center).Render(b.String())
+	// }
+	return b.String()
 }
 
 func (m *Model) buildDisplay() {
@@ -96,7 +103,7 @@ func (m *Model) buildDisplay() {
 		w("\n\n\n")
 
 		w(lipgloss.NewStyle().
-			Align(lipgloss.Center).Render(repo.BuildPinnedRepoDisplay([]struct{ Repo api.Repo }(u.PinnedItems.Nodes))))
+			Align(lipgloss.Center).Render(repo.BuildPinnedRepoDisplay([]struct{ Repo api.Repo }(u.PinnedItems.Nodes), m.ctx)))
 
 		m.display = lipgloss.NewStyle().
 			Align(lipgloss.Center).
@@ -107,4 +114,11 @@ func (m *Model) buildDisplay() {
 
 func (m Model) View() string {
 	return m.display
+}
+
+func (m *Model) UpdateProgramContext(ctx *context.ProgramContext) {
+	if ctx == nil {
+		return
+	}
+	m.ctx = ctx
 }

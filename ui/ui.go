@@ -1,12 +1,15 @@
 package ui
 
 import (
+	"log"
+
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/atotto/clipboard"
+	"github.com/coloradocolby/gh-eco/api"
 	"github.com/coloradocolby/gh-eco/ui/components/pager"
 	"github.com/coloradocolby/gh-eco/ui/components/search"
 	"github.com/coloradocolby/gh-eco/ui/components/user"
@@ -22,13 +25,12 @@ var (
 )
 
 type Model struct {
-	keys     utils.KeyMap
-	err      error
-	search   search.Model
-	pager    pager.Model
-	user     user.Model
-	ctx      context.ProgramContext
-	focusIdx int
+	keys   utils.KeyMap
+	err    error
+	search search.Model
+	pager  pager.Model
+	user   user.Model
+	ctx    context.ProgramContext
 }
 
 func New() Model {
@@ -39,11 +41,18 @@ func New() Model {
 		user:   user.NewModel(),
 		ctx: context.ProgramContext{
 			Mode: context.InsertMode,
-			FocusableWidgets: context.FocusableWidgets{
-				Search: context.FocusableWidgetState{},
+			FocusableWidgets: []context.FocusableWidget{
+				{
+					Name: "NoFocus",
+				},
+			},
+			CurrentFocus: context.CurrentFocus{
+				FocusIdx: 0,
+				FocusedWidget: context.FocusableWidget{
+					Name: "NoFocus",
+				},
 			},
 		},
-		focusIdx: 0,
 	}
 
 	return m
@@ -66,12 +75,13 @@ func (m Model) Init() tea.Cmd {
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var (
-		cmd        tea.Cmd
-		spinnerCmd tea.Cmd
-		pagerCmd   tea.Cmd
-		searchCmd  tea.Cmd
-		userCmd    tea.Cmd
-		cmds       []tea.Cmd
+		cmd            tea.Cmd
+		spinnerCmd     tea.Cmd
+		pagerCmd       tea.Cmd
+		searchCmd      tea.Cmd
+		focusChangeCmd tea.Cmd
+		userCmd        tea.Cmd
+		cmds           []tea.Cmd
 	)
 
 	switch msg := msg.(type) {
@@ -83,21 +93,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case context.NormalMode:
 			switch {
 			case key.Matches(msg, m.keys.Down):
-				m.SetFocus(m.focusIdx + 1)
+				log.Println(m.ctx.FocusableWidgets, m.ctx.CurrentFocus.FocusIdx, m.ctx.CurrentFocus.FocusedWidget.Name)
+
+				focusChangeCmd = m.FocusNext()
 			case key.Matches(msg, m.keys.Up):
-				m.SetFocus(m.focusIdx - 1)
+				focusChangeCmd = m.FocusPrev()
 			case key.Matches(msg, m.keys.Copy):
 				m.copyActiveWidgetToClipboard()
 			}
 		}
 
-		// when doing paging
-		// case api.SearchUserResponse:
-		// 	val, _ := json.MarshalIndent(msg.User, "", "    ")
-		// 	in := "```json\n" + string(val) + "\n```"
-		// 	out, _ := glamour.Render(in, "dark")
-		// 	m.pager.Viewport.SetContent(out)
+	// when doing paging
+	// case api.SearchUserResponse:
+	// 	val, _ := json.MarshalIndent(msg.User, "", "    ")
+	// 	in := "```json\n" + string(val) + "\n```"
+	// 	out, _ := glamour.Render(in, "dark")
+	// 	m.pager.Viewport.SetContent(out)
 
+	case api.SearchUserResponse:
+	case context.FocusChange:
+		m.ctx.FocusableWidgets = []context.FocusableWidget{
+			{
+				Name: "NoFocus",
+			},
+		}
 	}
 
 	m.syncProgramContext()
@@ -105,7 +124,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.search, searchCmd = m.search.Update(msg)
 	m.pager, pagerCmd = m.pager.Update(msg)
 	m.user, userCmd = m.user.Update(msg)
-	cmds = append(cmds, cmd, pagerCmd, spinnerCmd, searchCmd, userCmd)
+	cmds = append(cmds, cmd, pagerCmd, spinnerCmd, searchCmd, userCmd, focusChangeCmd)
 	return m, tea.Batch(cmds...)
 }
 
@@ -113,6 +132,11 @@ func (m Model) View() string {
 	if m.err != nil {
 		return m.err.Error()
 	}
+
+	// log.Println("------------")
+	// log.Println(m.ctx.FocusableWidgets)
+	// log.Println(m.ctx.CurrentFocus.FocusedWidget.Name)
+	// log.Println("------------")
 
 	// When doing paging
 	// if m.user.User.Login != "" {
@@ -133,13 +157,34 @@ func (m Model) View() string {
 
 }
 
-func (m *Model) SetFocus(newIdx int) {
-	m.focusIdx = newIdx
+func (m *Model) FocusNext() tea.Cmd {
+	cf := &m.ctx.CurrentFocus
+
+	numWidgets := len(m.ctx.FocusableWidgets)
+	cf.FocusIdx = (cf.FocusIdx + 1) % numWidgets
+	cf.FocusedWidget.Name = m.ctx.FocusableWidgets[cf.FocusIdx].Name
+
+	return func() tea.Msg {
+		return context.FocusChange{}
+	}
+}
+
+func (m *Model) FocusPrev() tea.Cmd {
+	cf := &m.ctx.CurrentFocus
+
+	numWidgets := len(m.ctx.FocusableWidgets)
+	cf.FocusIdx = (cf.FocusIdx - 1 + numWidgets) % numWidgets
+	cf.FocusedWidget.Name = m.ctx.FocusableWidgets[cf.FocusIdx].Name
+
+	return func() tea.Msg {
+		return context.FocusChange{}
+	}
 }
 
 func (m *Model) syncProgramContext() {
 	m.pager.UpdateProgramContext(&m.ctx)
 	m.search.UpdateProgramContext(&m.ctx)
+	m.user.UpdateProgramContext(&m.ctx)
 }
 
 func (m Model) copyActiveWidgetToClipboard() {
@@ -155,42 +200,3 @@ func (m Model) copyActiveWidgetToClipboard() {
 	// 	}
 	// }
 }
-
-// iter := 1
-
-// log.Println("__login")
-// login := Widget{
-// 	focusable: true,
-// 	isActive:  true,
-// }
-// log.Println("__login2")
-
-// login.display = boldActive.Render(m.displayedUser.Login)
-// // iter++
-// log.Println("__name")
-
-// name := Widget{
-// 	focusable: true,
-// 	isActive:  true,
-// 	display:   boldActive.Render(m.displayedUser.Name),
-// }
-// // iter++
-// log.Println("__location")
-
-// location := Widget{
-// 	focusable: true,
-// 	isActive:  true,
-// 	display:   boldActive.Render(m.displayedUser.Location),
-// }
-
-// m.widgets = append(m.widgets, search, login, name, location)
-// m.widgets = append(m.widgets, search)
-
-// var activeWidget Widget
-
-// for _, value := range m.widgets {
-// 	if value.isActive {
-// 		activeWidget = value
-// 		break
-// 	}
-// }
