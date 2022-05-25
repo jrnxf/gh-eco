@@ -8,6 +8,7 @@ import (
 	"github.com/coloradocolby/gh-eco/api"
 	"github.com/coloradocolby/gh-eco/ui/context"
 	"github.com/coloradocolby/gh-eco/ui/styles"
+	"github.com/coloradocolby/gh-eco/utils"
 )
 
 func buildRepoDisplay(repo api.Repo, width int, isFocused bool) string {
@@ -22,7 +23,7 @@ func buildRepoDisplay(repo api.Repo, width int, isFocused bool) string {
 	}
 	w("\n")
 
-	w(fmt.Sprintf("%v %s", repo.Description, strings.Repeat(" ", width)))
+	w(fmt.Sprintf("%v %s", utils.TruncateText(repo.Description, 60), strings.Repeat(" ", width)))
 	w("\n")
 	coloredCircle := lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: repo.PrimaryLanguage.Color, Dark: repo.PrimaryLanguage.Color}).Render("●")
 	w(fmt.Sprintf("%v %v  ⭑ %v", coloredCircle, repo.PrimaryLanguage.Name, repo.StargazerCount))
@@ -33,31 +34,29 @@ func buildRepoDisplay(repo api.Repo, width int, isFocused bool) string {
 }
 
 func BuildPinnedRepoDisplay(repos []struct{ Repo api.Repo }, ctx *context.ProgramContext) string {
-	var leftColB strings.Builder
-	lw := leftColB.WriteString
+	var lc strings.Builder // left col
+	var rc strings.Builder // right col
 
-	var rightColB strings.Builder
-	rw := rightColB.WriteString
-
-	maxLengthDesc := 0
+	maxRepoDescLength := 0
 	for _, r := range repos {
-		if len(r.Repo.Description) > maxLengthDesc {
-			maxLengthDesc = len(r.Repo.Description)
+		currRepoDescLength := len(utils.TruncateText(r.Repo.Description, 60))
+		if currRepoDescLength > maxRepoDescLength {
+			maxRepoDescLength = currRepoDescLength
 		}
 	}
 
 	for i, r := range repos {
+		currRepoDescLength := len(utils.TruncateText(r.Repo.Description, 60))
+
 		widgetName := fmt.Sprintf("PinnedRepo%v", i+1)
-		ctx.FocusableWidgets = append(ctx.FocusableWidgets, context.FocusableWidget{Name: widgetName})
-		d := buildRepoDisplay(r.Repo, maxLengthDesc-len(r.Repo.Description), ctx.CurrentFocus.FocusedWidget.Name == widgetName) + "\n\n"
+		ctx.FocusableWidgets = append(ctx.FocusableWidgets, context.FocusableWidget{Name: widgetName, Type: "REPO", Url: r.Repo.Url})
+		d := buildRepoDisplay(r.Repo, maxRepoDescLength-currRepoDescLength, ctx.CurrentFocus.FocusedWidget.Name == widgetName) + "\n"
 		if i%2 == 0 {
-			// left col
-			lw(d)
+			lc.WriteString(d)
 		} else {
-			rw(d)
-			// right col
+			rc.WriteString(d)
 		}
 	}
 
-	return lipgloss.JoinHorizontal(lipgloss.Top, leftColB.String(), rightColB.String())
+	return lipgloss.JoinHorizontal(lipgloss.Top, lc.String(), rc.String())
 }

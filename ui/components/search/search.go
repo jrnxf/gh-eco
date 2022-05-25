@@ -28,7 +28,7 @@ func NewModel() Model {
 	ti.Focus()
 
 	// to save during dev time start with my username
-	ti.SetValue("coloradocolby")
+	// ti.SetValue("coloradocolby")
 
 	return Model{
 		keys:      utils.Keys,
@@ -105,7 +105,7 @@ func (m Model) View() string {
 		w(m.textInput.View())
 	}
 
-	return lipgloss.NewStyle().Padding(1).Render(b.String())
+	return lipgloss.NewStyle().Render(b.String())
 }
 
 func (m *Model) UpdateProgramContext(ctx *context.ProgramContext) {

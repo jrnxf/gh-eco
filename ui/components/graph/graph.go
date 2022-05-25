@@ -3,12 +3,22 @@ package graph
 import (
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/coloradocolby/gh-eco/api"
-	"github.com/coloradocolby/gh-eco/utils"
+)
+
+var (
+	GH_GRAPH_CELL                 = "■ "
+	GH_GRAPH_CELL_NONE            = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#2D333B", Dark: "#2D333B"}).Render(GH_GRAPH_CELL)
+	GH_GRAPH_CELL_FIRST_QUARTILE  = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#006D32", Dark: "#006D32"}).Render(GH_GRAPH_CELL)
+	GH_GRAPH_CELL_SECOND_QUARTILE = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#006D32", Dark: "#006D32"}).Render(GH_GRAPH_CELL)
+	GH_GRAPH_CELL_THIRD_QUARTILE  = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#26A641", Dark: "#26A641"}).Render(GH_GRAPH_CELL)
+	GH_GRAPH_CELL_FOURTH_QUARTILE = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#39D353", Dark: "#39D353"}).Render(GH_GRAPH_CELL)
 )
 
 func BuildGraphDisplay(weeklyContributions []api.WeeklyContribution) string {
 	// prep the finished matrix
+
 	result := make([][]string, len(weeklyContributions))
 	for i := range result {
 		result[i] = make([]string, len(weeklyContributions[0].ContributionDays))
@@ -22,7 +32,9 @@ func BuildGraphDisplay(weeklyContributions []api.WeeklyContribution) string {
 
 	result = transposeSlice(result)
 
-	return generateContributionGraph(result)
+	foo := generateContributionGraph(result)
+
+	return foo
 }
 
 func transposeSlice(slice [][]string) [][]string {
@@ -50,15 +62,15 @@ func generateContributionGraph(slice [][]string) string {
 		for _, cell := range row {
 			switch cell {
 			case "NONE":
-				b.WriteString(graphCellNone.Render(utils.GH_GRAPH_CELL))
+				b.WriteString(GH_GRAPH_CELL_NONE)
 			case "FIRST_QUARTILE":
-				b.WriteString(graphCellFirstQuartile.Render(utils.GH_GRAPH_CELL))
+				b.WriteString(GH_GRAPH_CELL_FIRST_QUARTILE)
 			case "SECOND_QUARTILE":
-				b.WriteString(graphCellSecondQuartile.Render(utils.GH_GRAPH_CELL))
+				b.WriteString(GH_GRAPH_CELL_SECOND_QUARTILE)
 			case "THIRD_QUARTILE":
-				b.WriteString(graphCellThirdQuartile.Render(utils.GH_GRAPH_CELL))
+				b.WriteString(GH_GRAPH_CELL_THIRD_QUARTILE)
 			case "FOURTH_QUARTILE":
-				b.WriteString(graphCellFourthQuartile.Render(utils.GH_GRAPH_CELL))
+				b.WriteString(GH_GRAPH_CELL_FOURTH_QUARTILE)
 			}
 		}
 		b.WriteString("\n")

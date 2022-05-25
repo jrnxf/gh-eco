@@ -2,6 +2,7 @@ package pager
 
 import (
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/coloradocolby/gh-eco/ui/context"
@@ -18,13 +19,11 @@ const useHighPerformanceRenderer = false
 var (
 	titleStyle = func() lipgloss.Style {
 		b := lipgloss.RoundedBorder()
-		b.Right = "├"
-		return lipgloss.NewStyle().BorderStyle(b).Padding(0, 1)
+		return lipgloss.NewStyle().BorderStyle(b)
 	}()
 
 	infoStyle = func() lipgloss.Style {
 		b := lipgloss.RoundedBorder()
-		b.Left = "┤"
 		return titleStyle.Copy().BorderStyle(b)
 	}()
 )
@@ -59,6 +58,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		footerHeight := lipgloss.Height(m.footerView())
 		verticalMarginHeight := headerHeight + footerHeight
 
+		log.Println("headerHeight", headerHeight)
+		log.Println("footerHeight", footerHeight)
+		log.Println("verticalMarginHeight", verticalMarginHeight)
+
 		if !m.ready {
 			// Since this program is using the full size of the viewport we
 			// need to wait until we've received the window dimensions before
@@ -67,7 +70,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			// here.
 
 			// TODO: (fix) 1 represents the height of the text input, figure out a cleaner way to do this
-			m.Viewport = viewport.New(msg.Width, msg.Height-verticalMarginHeight-1)
+			m.Viewport = viewport.New(msg.Width, msg.Height-verticalMarginHeight-3)
 			m.Viewport.YPosition = headerHeight
 			m.Viewport.HighPerformanceRendering = useHighPerformanceRenderer
 			m.Viewport.SetContent(m.content)
@@ -137,4 +140,5 @@ func (m *Model) UpdateProgramContext(ctx *context.ProgramContext) {
 		return
 	}
 	m.ctx = ctx
+
 }

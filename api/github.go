@@ -12,6 +12,7 @@ type User struct {
 	Login    string
 	Name     string
 	Location string
+	Url      string
 	// Email             string // requires bigger token
 	Bio               string
 	Company           string
@@ -68,14 +69,14 @@ type SearchUserResponse struct {
 	User User
 }
 
-// mutation MyMutation {
+// mutation UnstarRepo {
 // 	removeStar(input: {starrableId: "R_kgDOGuzvkw"}) {
 // 	  starrable {
 // 		viewerHasStarred
 // 		stargazerCount
 // 	  }
 // 	}
-//   }
+// }
 
 func SearchUser(login string) tea.Cmd {
 	return func() tea.Msg {
@@ -92,13 +93,13 @@ func SearchUser(login string) tea.Cmd {
 			"login": graphql.String(login),
 			"first": graphql.Int(6),
 		}
-		log.Println("searching for", login)
+		log.Println("SearchUser START")
 		err = client.Query("SearchUser", &query, variables)
 		if err != nil {
 			log.Println(err)
 			return SearchUserResponse{Err: err}
 		}
-		log.Println("found ", query.User.Name)
+		log.Println("SearchUser END")
 		return SearchUserResponse{User: query.User}
 	}
 

@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/coloradocolby/gh-eco/api"
 	"github.com/coloradocolby/gh-eco/ui/components/graph"
+	"github.com/coloradocolby/gh-eco/ui/components/pager"
 	"github.com/coloradocolby/gh-eco/ui/components/repo"
 	"github.com/coloradocolby/gh-eco/ui/context"
 	"github.com/coloradocolby/gh-eco/ui/styles"
@@ -17,6 +18,7 @@ import (
 
 type Model struct {
 	User    api.User
+	pager   pager.Model
 	display string
 	err     error
 	ctx     *context.ProgramContext
@@ -24,13 +26,18 @@ type Model struct {
 
 func NewModel() Model {
 	return Model{
-		User: api.User{},
-		err:  nil,
+		User:  api.User{},
+		pager: pager.NewModel(),
+		err:   nil,
 	}
 }
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
-	var cmd tea.Cmd
+	var (
+		cmd      tea.Cmd
+		pagerCmd tea.Cmd
+		cmds     []tea.Cmd
+	)
 
 	switch msg := msg.(type) {
 	case api.SearchUserResponse:
@@ -42,11 +49,12 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		m.buildDisplay()
 	case context.FocusChange:
-		// log.Println(m.ctx.CurrentFocus)
 		m.buildDisplay()
 	}
 
-	return m, cmd
+	m.pager, pagerCmd = m.pager.Update(msg)
+	cmds = append(cmds, cmd, pagerCmd)
+	return m, tea.Batch(cmds...)
 }
 
 func (m Model) buildUserDisplay() string {
@@ -67,13 +75,8 @@ func (m Model) buildUserDisplay() string {
 
 	w(fmt.Sprintf("%v  |  %v  |  @%v", u.Location, u.WebsiteUrl, u.TwitterUsername))
 
-	m.ctx.FocusableWidgets = append(m.ctx.FocusableWidgets, context.FocusableWidget{Name: "UserDisplay"})
-	// if m.ctx.CurrentFocus.FocusedWidget.Name == "UserDisplay" {
-	// 	return styles.FocusedFrame.Copy().Align(lipgloss.Center).Render(b.String())
+	m.ctx.FocusableWidgets = append(m.ctx.FocusableWidgets, context.FocusableWidget{Name: "UserDisplay", Type: "USER", Url: m.User.Url})
 
-	// } else {
-	// 	return styles.Frame.Copy().Align(lipgloss.Center).Render(b.String())
-	// }
 	return b.String()
 }
 
@@ -85,15 +88,15 @@ func (m *Model) buildDisplay() {
 
 	u := m.User
 	if m.err != nil {
-		m.display = "No user found"
+		m.pager.Viewport.SetContent("No user found")
 	} else {
 
-		// w(styles.Focus.Copy().Align(lipgloss.Center).Render(m.buildUserDisplay()))
 		w(m.buildUserDisplay())
 
 		w("\n\n\n")
 
 		w(fmt.Sprintf("%v contributions", u.ContributionsCollection.ContributionCalendar.TotalContributions))
+
 		w("\n")
 
 		w(lipgloss.NewStyle().
@@ -120,5 +123,7 @@ func (m *Model) UpdateProgramContext(ctx *context.ProgramContext) {
 	if ctx == nil {
 		return
 	}
+	m.pager.UpdateProgramContext(ctx)
+
 	m.ctx = ctx
 }

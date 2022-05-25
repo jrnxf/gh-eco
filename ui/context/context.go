@@ -9,13 +9,15 @@ const (
 
 type FocusableWidget struct {
 	Name string
+	Type string
+	Url  string
 }
 
 type ProgramContext struct {
-	ScreenHeight     int
-	ScreenWidth      int
-	ContentHeight    int
-	ContentWidth     int
+	// ScreenHeight     int
+	// ScreenWidth      int
+	// ContentHeight    int
+	// ContentWidth     int
 	Mode             Mode
 	FocusableWidgets []FocusableWidget
 	CurrentFocus     CurrentFocus

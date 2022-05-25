@@ -22,5 +22,5 @@ var (
 		BottomRight: "╯",
 	}
 
-	Frame = lipgloss.NewStyle().Border(roundedBorder, true).Margin(0, 2).Padding(0, 1)
+	Frame = lipgloss.NewStyle().Border(roundedBorder, true).Padding(0, 1).Margin(0, 1)
 )
