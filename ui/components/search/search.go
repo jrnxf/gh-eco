@@ -70,7 +70,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 		case context.NormalMode:
 			if key.Matches(msg, m.keys.FocusInput) {
-				m.textInput.Reset()
+				// m.textInput.Reset()
 				m.ctx.Mode = context.InsertMode
 				m.textInput.SetCursorMode(textinput.CursorBlink)
 				return m, textinput.Blink

@@ -2,6 +2,7 @@ package user
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"strings"
 
@@ -63,20 +64,46 @@ func (m Model) buildUserDisplay() string {
 	var b strings.Builder
 	w := b.WriteString
 
-	if m.ctx.CurrentFocus.FocusedWidget.Name == "UserDisplay" {
-		w(styles.FocusedBold.Render(u.Name) + "\n\n")
-	} else {
-		w(styles.Bold.Render(u.Name) + "\n\n")
+	if u.Name == "" && u.Login != "" {
+		if m.ctx.CurrentFocus.FocusedWidget.Name == "UserDisplay" {
+			w(styles.FocusedBold.Render(u.Login) + "\n\n")
+		} else {
+			w(styles.Bold.Render(u.Login) + "\n\n")
+		}
+	}
+	if u.Name != "" {
+		if m.ctx.CurrentFocus.FocusedWidget.Name == "UserDisplay" {
+			w(styles.FocusedBold.Render(u.Name) + "\n\n")
+		} else {
+			w(styles.Bold.Render(u.Name) + "\n\n")
+		}
 	}
 
-	w(styles.Subtle.Render(u.Bio) + "\n\n")
+	if u.Bio != "" {
+		w(styles.Subtle.Copy().Width(80).Align(lipgloss.Center).Render(u.Bio) + "\n\n")
+	}
 
-	w(fmt.Sprintf("%v %v · %v %v\n\n", u.Followers.TotalCount, "followers", u.Following.TotalCount, "following"))
+	w(fmt.Sprintf("%v %v · %v %v\n", u.Followers.TotalCount, "followers", u.Following.TotalCount, "following"))
 
-	w(fmt.Sprintf("%v  |  %v  |  @%v", u.Location, u.WebsiteUrl, u.TwitterUsername))
+	if (u.Location != "") || (u.WebsiteUrl != "") || (u.TwitterUsername != "") {
+		line := []string{}
+		if u.Location != "" {
+			line = append(line, u.Location)
+		}
+		if u.WebsiteUrl != "" {
+			line = append(line, u.WebsiteUrl)
+		}
+		if u.TwitterUsername != "" {
+			line = append(line, u.TwitterUsername)
+		}
+		w("\n")
+		w(strings.Join(line, "  |  "))
+		w("\n")
+	}
 
 	m.ctx.FocusableWidgets = append(m.ctx.FocusableWidgets, context.FocusableWidget{Name: "UserDisplay", Type: "USER", Url: m.User.Url})
 
+	log.Println(b.String())
 	return b.String()
 }
 
@@ -93,7 +120,7 @@ func (m *Model) buildDisplay() {
 
 		w(m.buildUserDisplay())
 
-		w("\n\n\n")
+		w("\n\n")
 
 		w(fmt.Sprintf("%v contributions", u.ContributionsCollection.ContributionCalendar.TotalContributions))
 
@@ -103,7 +130,7 @@ func (m *Model) buildDisplay() {
 			Align(lipgloss.Left).
 			Render(graph.BuildGraphDisplay(u.ContributionsCollection.ContributionCalendar.Weeks)))
 
-		w("\n\n\n")
+		w("\n\n")
 
 		w(lipgloss.NewStyle().
 			Align(lipgloss.Center).Render(repo.BuildPinnedRepoDisplay([]struct{ Repo api.Repo }(u.PinnedItems.Nodes), m.ctx)))
