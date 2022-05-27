@@ -7,16 +7,18 @@ import (
 // keyMap defines a set of keybindings. To work for help it must satisfy
 // key.Map. It could also very easily be a map[string]key.Binding.
 type KeyMap struct {
-	FocusNext key.Binding
-	FocusPrev key.Binding
-	// PreviewPageDown key.Binding
-	// PreviewPageUp   key.Binding
+	FocusNext       key.Binding
+	FocusPrev       key.Binding
+	PreviewPageDown key.Binding
+	PreviewPageUp   key.Binding
 	// Copy            key.Binding
-	OpenGithub key.Binding
-	FocusInput key.Binding
-	Search     key.Binding
-	Help       key.Binding
-	Quit       key.Binding
+	ExitReadme    key.Binding
+	PreviewReadme key.Binding
+	OpenGithub    key.Binding
+	FocusInput    key.Binding
+	Search        key.Binding
+	Help          key.Binding
+	Quit          key.Binding
 }
 
 // ShortHelp returns keybindings to be shown in the mini help view. It's part
@@ -30,10 +32,10 @@ func (k KeyMap) ShortHelp() []key.Binding {
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.FocusNext, k.FocusPrev},
-		// {k.PreviewPageDown, k.PreviewPageUp},
 		{k.FocusInput, k.Search},
-		{k.OpenGithub, k.Quit},
-		{k.Help},
+		{k.OpenGithub, k.PreviewReadme},
+		{k.PreviewPageDown, k.PreviewPageUp},
+		{k.Help, k.Quit},
 	}
 }
 
@@ -46,18 +48,26 @@ var Keys = KeyMap{
 		key.WithKeys("down", "j"),
 		key.WithHelp("↓/j", "move down"),
 	),
-	// PreviewPageUp: key.NewBinding(
-	// 	key.WithKeys("ctrl+u"),
-	// 	key.WithHelp("ctrl+u", "preview page up"),
-	// ),
-	// PreviewPageDown: key.NewBinding(
-	// 	key.WithKeys("ctrl+d"),
-	// 	key.WithHelp("ctrl+d", "preview page down"),
-	// ),
+	PreviewPageUp: key.NewBinding(
+		key.WithKeys("ctrl+u"),
+		key.WithHelp("ctrl+u", "preview page up"),
+	),
+	PreviewPageDown: key.NewBinding(
+		key.WithKeys("ctrl+d"),
+		key.WithHelp("ctrl+d", "preview page down"),
+	),
 	// Copy: key.NewBinding(
 	// 	key.WithKeys("c"),
 	// 	key.WithHelp("c", "copy to clipboard"),
 	// ),
+	ExitReadme: key.NewBinding(
+		key.WithKeys("backspace"),
+		key.WithHelp("backspace", "exit readme"),
+	),
+	PreviewReadme: key.NewBinding(
+		key.WithKeys("p"),
+		key.WithHelp("p", "preview readme"),
+	),
 	OpenGithub: key.NewBinding(
 		key.WithKeys("o"),
 		key.WithHelp("o", "open in github"),

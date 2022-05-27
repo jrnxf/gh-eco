@@ -5,102 +5,69 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/cli/go-gh"
+	"github.com/coloradocolby/gh-eco/types/display"
+	"github.com/coloradocolby/gh-eco/types/queries"
+	"github.com/coloradocolby/gh-eco/utils"
 	graphql "github.com/shurcooL/graphql"
 )
 
-type User struct {
-	Login    string
-	Name     string
-	Location string
-	Url      string
-	// Email             string // requires bigger token
-	Bio               string
-	Company           string
-	TwitterUsername   string
-	WebsiteUrl        string
-	ViewerIsFollowing bool
-	IsFollowingViewer bool
-	IsViewer          bool
-	IsHireable        bool
-	Status            struct {
-		Emoji   string
-		Message string
-	}
-	RepositoriesContributedTo TotalCount
-	Followers                 TotalCount
-	Following                 TotalCount
-	PinnedItems               struct {
-		Nodes []struct {
-			Repo Repo `graphql:"... on Repository"`
-		}
-	} `graphql:"pinnedItems(first: $first)"`
-	ContributionsCollection struct {
-		ContributionCalendar struct {
-			TotalContributions int
-			Weeks              []WeeklyContribution
-		}
-	}
-}
-
-type Repo struct {
-	Id              string
-	Name            string
-	Description     string
-	StargazerCount  int
-	Url             string
-	PrimaryLanguage struct {
-		Name  string
-		Color string
-	}
-}
-
-type WeeklyContribution struct {
-	ContributionDays []struct {
-		ContributionLevel string
-	}
-}
-
-type TotalCount struct {
-	TotalCount int
-}
-
-type SearchUserResponse struct {
+type GetUserResponse struct {
 	Err  error
-	User User
+	User display.User
 }
 
-// mutation UnstarRepo {
-// 	removeStar(input: {starrableId: "R_kgDOGuzvkw"}) {
-// 	  starrable {
-// 		viewerHasStarred
-// 		stargazerCount
-// 	  }
-// 	}
-// }
-
-func SearchUser(login string) tea.Cmd {
+func GetUser(login string) tea.Cmd {
 	return func() tea.Msg {
 		client, err := gh.GQLClient(nil)
 		if err != nil {
-			return SearchUserResponse{Err: err}
+			return GetUserResponse{Err: err}
 		}
 
-		var query struct {
-			User User `graphql:"user(login: $login)"`
-		}
+		var query queries.GetUser
 
 		variables := map[string]interface{}{
 			"login": graphql.String(login),
 			"first": graphql.Int(6),
 		}
-		log.Println("SearchUser START")
-		err = client.Query("SearchUser", &query, variables)
+		log.Println("GetUser START")
+		err = client.Query("GetUser", &query, variables)
 		if err != nil {
 			log.Println(err)
-			return SearchUserResponse{Err: err}
+			return GetUserResponse{Err: err}
 		}
-		log.Println("SearchUser END")
-		return SearchUserResponse{User: query.User}
+		log.Println("GetUser END")
+		return GetUserResponse{User: utils.MapGetUserQueryToDisplayUser(query)}
 	}
+}
 
+type GetReadmeResponse struct {
+	Err    error
+	Readme display.Blob
+}
+
+func GetReadme(name string, owner string) tea.Cmd {
+	return func() tea.Msg {
+		log.Println("GR")
+		client, err := gh.GQLClient(nil)
+		if err != nil {
+			return GetReadmeResponse{Err: err}
+		}
+
+		var query queries.GetReadme
+
+		variables := map[string]interface{}{
+			"name":       graphql.String(name),
+			"owner":      graphql.String(owner),
+			"expression": graphql.String("HEAD:README.md"),
+		}
+		log.Println("GetReadme START")
+
+		err = client.Query("GetReadme", &query, variables)
+		if err != nil {
+			log.Println(err)
+			return GetReadmeResponse{Err: err}
+		}
+		log.Println("GetReadme END")
+		return GetReadmeResponse{Readme: query.Repository.Object.Blob}
+	}
 }

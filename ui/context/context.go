@@ -1,5 +1,7 @@
 package context
 
+import "github.com/coloradocolby/gh-eco/types/display"
+
 type Mode int
 
 const (
@@ -7,10 +9,20 @@ const (
 	NormalMode
 )
 
+type View int
+
+const (
+	UserView View = iota
+	RepoView
+)
+
 type FocusableWidget struct {
-	Name string
 	Type string
-	Url  string
+	Repo struct {
+		Url   string
+		Owner string
+		Name  string
+	}
 }
 
 type ProgramContext struct {
@@ -18,6 +30,8 @@ type ProgramContext struct {
 	// ScreenWidth      int
 	// ContentHeight    int
 	// ContentWidth     int
+	User             display.User
+	View             View
 	Mode             Mode
 	FocusableWidgets []FocusableWidget
 	CurrentFocus     CurrentFocus

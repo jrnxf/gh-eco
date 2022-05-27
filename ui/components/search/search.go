@@ -28,7 +28,7 @@ func NewModel() Model {
 	ti.Focus()
 
 	// to save during dev time start with my username
-	// ti.SetValue("coloradocolby")
+	ti.SetValue("coloradocolby")
 
 	return Model{
 		keys:      utils.Keys,
@@ -41,10 +41,10 @@ func NewModel() Model {
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	var (
-		cmd           tea.Cmd
-		spinnerCmd    tea.Cmd
-		textInputCmd  tea.Cmd
-		searchUserCmd tea.Cmd
+		cmd          tea.Cmd
+		spinnerCmd   tea.Cmd
+		textInputCmd tea.Cmd
+		getUserCmd   tea.Cmd
 
 		cmds []tea.Cmd
 	)
@@ -63,9 +63,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			if key.Matches(msg, m.keys.Search) {
 				m.ctx.Mode = context.NormalMode
 				m.textInput.SetCursorMode(textinput.CursorHide)
-				searchUserCmd = api.SearchUser(m.textInput.Value())
+				getUserCmd = api.GetUser(m.textInput.Value())
 				m.fetching = true
-				cmds = append(cmds, m.spinner.Tick)
+				cmds = append(cmds, m.spinner.Tick, getUserCmd)
 			}
 
 		case context.NormalMode:
@@ -77,7 +77,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			}
 
 		}
-	case api.SearchUserResponse:
+	case api.GetUserResponse:
 		m.fetching = false
 	}
 
@@ -91,7 +91,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.spinner, spinnerCmd = m.spinner.Update(msg)
 	}
 
-	cmds = append(cmds, cmd, spinnerCmd, textInputCmd, searchUserCmd)
+	cmds = append(cmds, cmd, spinnerCmd, textInputCmd)
 	return m, tea.Batch(cmds...)
 }
 

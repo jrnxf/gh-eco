@@ -9,6 +9,8 @@ import (
 	"unicode"
 
 	"github.com/charmbracelet/glamour"
+	"github.com/coloradocolby/gh-eco/types/display"
+	"github.com/coloradocolby/gh-eco/types/queries"
 )
 
 func TruncateText(str string, max int) string {
@@ -53,5 +55,42 @@ func BrowserOpen(url string) {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
 
+func MapGetUserQueryToDisplayUser(query queries.GetUser) display.User {
+	qu := query.User
+	du := display.User{
+		Login:           qu.Login,
+		Name:            qu.Name,
+		Location:        qu.Location,
+		Url:             qu.Url,
+		Bio:             qu.Bio,
+		TwitterUsername: qu.TwitterUsername,
+		WebsiteUrl:      qu.WebsiteUrl,
+		FollowersCount:  qu.Followers.TotalCount,
+		FollowingCount:  qu.Following.TotalCount,
+	}
+
+	du.ActivityGraph.ContributionsCount = qu.ContributionsCollection.ContributionCalendar.TotalContributions
+
+	for _, week := range qu.ContributionsCollection.ContributionCalendar.Weeks {
+		du.ActivityGraph.Weeks = append(du.ActivityGraph.Weeks, week)
+	}
+
+	for _, node := range qu.PinnedItems.Nodes {
+		r := node.Repository
+		du.PinnedRepos = append(du.PinnedRepos, display.Repo{
+			Id:          r.Id,
+			Name:        r.Name,
+			Description: r.Description,
+			StarsCount:  r.StargazerCount,
+			Owner: struct{ Login string }{
+				Login: r.Owner.Login,
+			},
+			Url:             r.Url,
+			PrimaryLanguage: r.PrimaryLanguage,
+		})
+	}
+
+	return du
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/coloradocolby/gh-eco/api"
 	"github.com/coloradocolby/gh-eco/ui/components/help"
+	"github.com/coloradocolby/gh-eco/ui/components/pager"
 	"github.com/coloradocolby/gh-eco/ui/components/search"
 	"github.com/coloradocolby/gh-eco/ui/components/user"
 	"github.com/coloradocolby/gh-eco/ui/context"
@@ -19,6 +20,7 @@ type Model struct {
 	err    error
 	search search.Model
 	user   user.Model
+	pager  pager.Model
 	help   help.Model
 	ctx    context.ProgramContext
 }
@@ -29,17 +31,18 @@ func New() Model {
 		search: search.NewModel(),
 		user:   user.NewModel(),
 		help:   help.NewModel(),
+		pager:  pager.NewModel(),
 		ctx: context.ProgramContext{
 			Mode: context.InsertMode,
 			FocusableWidgets: []context.FocusableWidget{
 				{
-					Name: "NoFocus",
+					Type: "NoFocus",
 				},
 			},
 			CurrentFocus: context.CurrentFocus{
 				FocusIdx: 0,
 				FocusedWidget: context.FocusableWidget{
-					Name: "NoFocus",
+					Type: "NoFocus",
 				},
 			},
 		},
@@ -71,6 +74,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		focusChangeCmd tea.Cmd
 		userCmd        tea.Cmd
 		helpCmd        tea.Cmd
+		pagerCmd       tea.Cmd
+		getReadmeCmd   tea.Cmd
 		cmds           []tea.Cmd
 	)
 
@@ -87,15 +92,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case key.Matches(msg, m.keys.FocusPrev):
 				focusChangeCmd = m.FocusPrev()
 			case key.Matches(msg, m.keys.OpenGithub):
-				utils.BrowserOpen(m.ctx.CurrentFocus.FocusedWidget.Url)
+				utils.BrowserOpen(m.ctx.CurrentFocus.FocusedWidget.Repo.Url)
+			case key.Matches(msg, m.keys.PreviewReadme):
+				getReadmeCmd = api.GetReadme(m.ctx.CurrentFocus.FocusedWidget.Repo.Name, m.ctx.CurrentFocus.FocusedWidget.Repo.Owner)
+			case key.Matches(msg, m.keys.ExitReadme):
+				m.ctx.View = context.UserView
 			}
 		}
 
-	case api.SearchUserResponse:
+	case api.GetUserResponse:
 	case context.FocusChange:
 		m.ctx.FocusableWidgets = []context.FocusableWidget{
 			{
-				Name: "NoFocus",
+				Type: "NoFocus",
 			},
 		}
 	}
@@ -103,9 +112,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.syncProgramContext()
 
 	m.search, searchCmd = m.search.Update(msg)
+	m.pager, pagerCmd = m.pager.Update(msg)
 	m.user, userCmd = m.user.Update(msg)
 	m.help, helpCmd = m.help.Update(msg)
-	cmds = append(cmds, cmd, spinnerCmd, searchCmd, userCmd, helpCmd, focusChangeCmd)
+	cmds = append(cmds, cmd, spinnerCmd, searchCmd, userCmd, helpCmd, pagerCmd, getReadmeCmd, focusChangeCmd)
 	return m, tea.Batch(cmds...)
 }
 
@@ -114,10 +124,15 @@ func (m Model) View() string {
 		return m.err.Error()
 	}
 
+	if m.ctx.View == context.RepoView {
+		return m.pager.View()
+	}
+
 	return lipgloss.JoinVertical(lipgloss.Left,
 		lipgloss.NewStyle().PaddingTop(1).Render(m.search.View()),
 		m.user.View(),
-		m.help.View(),
+		// m.help.View(),
+		// m.pager.View(),
 	)
 }
 
@@ -146,6 +161,7 @@ func (m *Model) FocusPrev() tea.Cmd {
 }
 
 func (m *Model) syncProgramContext() {
+	m.pager.UpdateProgramContext(&m.ctx)
 	m.search.UpdateProgramContext(&m.ctx)
 	m.user.UpdateProgramContext(&m.ctx)
 	m.help.UpdateProgramContext(&m.ctx)

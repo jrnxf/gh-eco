@@ -1,8 +1,6 @@
 package help
 
 import (
-	"log"
-
 	baseHelp "github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
@@ -32,7 +30,6 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, utils.Keys.Help):
-			log.Printf("show all %v", m.help.ShowAll)
 			m.help.ShowAll = !m.help.ShowAll
 		}
 	}

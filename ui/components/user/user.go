@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/coloradocolby/gh-eco/api"
+	"github.com/coloradocolby/gh-eco/types/display"
 	"github.com/coloradocolby/gh-eco/ui/components/graph"
 	"github.com/coloradocolby/gh-eco/ui/components/pager"
 	"github.com/coloradocolby/gh-eco/ui/components/repo"
@@ -18,7 +19,7 @@ import (
 )
 
 type Model struct {
-	User    api.User
+	User    display.User
 	pager   pager.Model
 	display string
 	err     error
@@ -27,25 +28,26 @@ type Model struct {
 
 func NewModel() Model {
 	return Model{
-		User:  api.User{},
-		pager: pager.NewModel(),
-		err:   nil,
+		User: display.User{},
+		err:  nil,
 	}
 }
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	var (
-		cmd      tea.Cmd
-		pagerCmd tea.Cmd
-		cmds     []tea.Cmd
+		cmd  tea.Cmd
+		cmds []tea.Cmd
 	)
 
 	switch msg := msg.(type) {
-	case api.SearchUserResponse:
+	case api.GetUserResponse:
 		if msg.Err != nil {
 			m.err = msg.Err
 		} else {
+			log.Println("context user")
+			log.Println(m.ctx.User)
 			m.User = msg.User
+			m.ctx.User = msg.User
 			m.err = nil
 		}
 		m.buildDisplay()
@@ -53,8 +55,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.buildDisplay()
 	}
 
-	m.pager, pagerCmd = m.pager.Update(msg)
-	cmds = append(cmds, cmd, pagerCmd)
+	cmds = append(cmds, cmd)
 	return m, tea.Batch(cmds...)
 }
 
@@ -65,14 +66,14 @@ func (m Model) buildUserDisplay() string {
 	w := b.WriteString
 
 	if u.Name == "" && u.Login != "" {
-		if m.ctx.CurrentFocus.FocusedWidget.Name == "UserDisplay" {
+		if m.ctx.CurrentFocus.FocusedWidget.Type == "UserDisplay" {
 			w(styles.FocusedBold.Render(u.Login) + "\n\n")
 		} else {
 			w(styles.Bold.Render(u.Login) + "\n\n")
 		}
 	}
 	if u.Name != "" {
-		if m.ctx.CurrentFocus.FocusedWidget.Name == "UserDisplay" {
+		if m.ctx.CurrentFocus.FocusedWidget.Type == "UserDisplay" {
 			w(styles.FocusedBold.Render(u.Name) + "\n\n")
 		} else {
 			w(styles.Bold.Render(u.Name) + "\n\n")
@@ -83,7 +84,7 @@ func (m Model) buildUserDisplay() string {
 		w(styles.Subtle.Copy().Width(80).Align(lipgloss.Center).Render(u.Bio) + "\n\n")
 	}
 
-	w(fmt.Sprintf("%v %v · %v %v\n", u.Followers.TotalCount, "followers", u.Following.TotalCount, "following"))
+	w(fmt.Sprintf("%v %v · %v %v\n", u.FollowersCount, "followers", u.FollowingCount, "following"))
 
 	if (u.Location != "") || (u.WebsiteUrl != "") || (u.TwitterUsername != "") {
 		line := []string{}
@@ -101,9 +102,16 @@ func (m Model) buildUserDisplay() string {
 		w("\n")
 	}
 
-	m.ctx.FocusableWidgets = append(m.ctx.FocusableWidgets, context.FocusableWidget{Name: "UserDisplay", Type: "USER", Url: m.User.Url})
+	m.ctx.FocusableWidgets = append(m.ctx.FocusableWidgets, context.FocusableWidget{Type: "UserDisplay", Repo: struct {
+		Url   string
+		Owner string
+		Name  string
+	}{
+		Url:   m.User.Url,
+		Owner: m.User.Login,
+		Name:  m.User.Login,
+	}})
 
-	log.Println(b.String())
 	return b.String()
 }
 
@@ -122,18 +130,18 @@ func (m *Model) buildDisplay() {
 
 		w("\n\n")
 
-		w(fmt.Sprintf("%v contributions", u.ContributionsCollection.ContributionCalendar.TotalContributions))
+		w(fmt.Sprintf("%v contributions", u.ActivityGraph.ContributionsCount))
 
 		w("\n")
 
 		w(lipgloss.NewStyle().
 			Align(lipgloss.Left).
-			Render(graph.BuildGraphDisplay(u.ContributionsCollection.ContributionCalendar.Weeks)))
+			Render(graph.BuildGraphDisplay(u.ActivityGraph.Weeks)))
 
 		w("\n\n")
 
 		w(lipgloss.NewStyle().
-			Align(lipgloss.Center).Render(repo.BuildPinnedRepoDisplay([]struct{ Repo api.Repo }(u.PinnedItems.Nodes), m.ctx)))
+			Align(lipgloss.Center).Render(repo.BuildPinnedRepoDisplay(u.PinnedRepos, m.ctx)))
 
 		m.display = lipgloss.NewStyle().
 			Align(lipgloss.Center).

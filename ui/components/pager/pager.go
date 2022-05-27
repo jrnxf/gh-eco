@@ -5,10 +5,12 @@ import (
 	"log"
 	"strings"
 
+	"github.com/coloradocolby/gh-eco/api"
 	"github.com/coloradocolby/gh-eco/ui/context"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -58,10 +60,6 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		footerHeight := lipgloss.Height(m.footerView())
 		verticalMarginHeight := headerHeight + footerHeight
 
-		log.Println("headerHeight", headerHeight)
-		log.Println("footerHeight", footerHeight)
-		log.Println("verticalMarginHeight", verticalMarginHeight)
-
 		if !m.ready {
 			// Since this program is using the full size of the viewport we
 			// need to wait until we've received the window dimensions before
@@ -70,7 +68,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			// here.
 
 			// TODO: (fix) 1 represents the height of the text input, figure out a cleaner way to do this
-			m.Viewport = viewport.New(msg.Width, msg.Height-verticalMarginHeight-3)
+			m.Viewport = viewport.New(msg.Width, msg.Height-verticalMarginHeight)
 			m.Viewport.YPosition = headerHeight
 			m.Viewport.HighPerformanceRendering = useHighPerformanceRenderer
 			m.Viewport.SetContent(m.content)
@@ -99,6 +97,13 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			// only listen for keyboard events if in normal mode
 			m.Viewport, cmd = m.Viewport.Update(msg)
 		}
+	case api.GetReadmeResponse:
+		log.Println("here")
+		log.Println(msg.Readme.Text)
+		m.ctx.View = context.RepoView
+		out, _ := glamour.Render(msg.Readme.Text, "dark")
+
+		m.Viewport.SetContent(out)
 	default:
 		// Handle other events (like mouse events)
 		m.Viewport, cmd = m.Viewport.Update(msg)
