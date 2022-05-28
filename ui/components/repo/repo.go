@@ -5,13 +5,13 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/coloradocolby/gh-eco/types/display"
 	"github.com/coloradocolby/gh-eco/ui/context"
+	"github.com/coloradocolby/gh-eco/ui/models"
 	"github.com/coloradocolby/gh-eco/ui/styles"
 	"github.com/coloradocolby/gh-eco/utils"
 )
 
-func buildRepoDisplay(repo display.Repo, width int, isFocused bool) string {
+func buildRepoDisplay(repo models.Repo, width int, isFocused bool) string {
 	// prep the finished matrix
 	var b strings.Builder
 	w := b.WriteString
@@ -33,7 +33,7 @@ func buildRepoDisplay(repo display.Repo, width int, isFocused bool) string {
 
 }
 
-func BuildPinnedRepoDisplay(repos []display.Repo, ctx *context.ProgramContext) string {
+func BuildPinnedRepoDisplay(repos []models.Repo, ctx *context.ProgramContext) string {
 	var lc strings.Builder // left col
 	var rc strings.Builder // right col
 
@@ -49,14 +49,14 @@ func BuildPinnedRepoDisplay(repos []display.Repo, ctx *context.ProgramContext) s
 		currRepoDescLength := len(utils.TruncateText(r.Description, 60))
 
 		widgetName := fmt.Sprintf("PinnedRepo%v", i+1)
-		ctx.FocusableWidgets = append(ctx.FocusableWidgets, context.FocusableWidget{Type: widgetName, Repo: struct {
-			Url   string
-			Owner string
-			Name  string
+		ctx.FocusableWidgets = append(ctx.FocusableWidgets, context.FocusableWidget{Type: widgetName, Info: struct {
+			Url      string
+			Owner    string
+			RepoName string
 		}{
-			Url:   r.Url,
-			Owner: r.Owner.Login,
-			Name:  r.Name,
+			Url:      r.Url,
+			Owner:    r.Owner.Login,
+			RepoName: r.Name,
 		}})
 		d := buildRepoDisplay(r, maxRepoDescLength-currRepoDescLength, ctx.CurrentFocus.FocusedWidget.Type == widgetName) + "\n"
 		if i%2 == 0 {

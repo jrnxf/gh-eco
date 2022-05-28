@@ -8,7 +8,8 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/coloradocolby/gh-eco/api"
+	"github.com/coloradocolby/gh-eco/api/github"
+	"github.com/coloradocolby/gh-eco/ui/commands"
 	"github.com/coloradocolby/gh-eco/ui/components/spinner"
 	"github.com/coloradocolby/gh-eco/ui/context"
 	"github.com/coloradocolby/gh-eco/utils"
@@ -26,9 +27,10 @@ type Model struct {
 func NewModel() Model {
 	ti := textinput.NewModel()
 	ti.Focus()
+	ti.Placeholder = "search by username"
 
 	// to save during dev time start with my username
-	ti.SetValue("coloradocolby")
+	// ti.SetValue("coloradocolby")
 
 	return Model{
 		keys:      utils.Keys,
@@ -63,21 +65,21 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			if key.Matches(msg, m.keys.Search) {
 				m.ctx.Mode = context.NormalMode
 				m.textInput.SetCursorMode(textinput.CursorHide)
-				getUserCmd = api.GetUser(m.textInput.Value())
+				getUserCmd = github.GetUser(m.textInput.Value())
 				m.fetching = true
 				cmds = append(cmds, m.spinner.Tick, getUserCmd)
 			}
 
 		case context.NormalMode:
 			if key.Matches(msg, m.keys.FocusInput) {
-				// m.textInput.Reset()
+				m.textInput.Reset()
 				m.ctx.Mode = context.InsertMode
 				m.textInput.SetCursorMode(textinput.CursorBlink)
 				return m, textinput.Blink
 			}
-
 		}
-	case api.GetUserResponse:
+
+	case commands.GetUserResponse:
 		m.fetching = false
 	}
 
@@ -99,6 +101,7 @@ func (m Model) View() string {
 	var b strings.Builder
 	w := b.WriteString
 
+	w("\n")
 	if m.fetching {
 		w(fmt.Sprintf("%s%s", m.textInput.View(), m.spinner.View()))
 	} else {

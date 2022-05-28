@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/coloradocolby/gh-eco/types/display"
+	"github.com/coloradocolby/gh-eco/ui/models"
 )
 
 var (
@@ -16,7 +16,7 @@ var (
 	GH_GRAPH_CELL_FOURTH_QUARTILE = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#39D353", Dark: "#39D353"}).Render(GH_GRAPH_CELL)
 )
 
-func BuildGraphDisplay(weeklyContributions []display.WeeklyContribution) string {
+func BuildGraphDisplay(weeklyContributions []models.WeeklyContribution) string {
 	// prep the finished matrix
 
 	result := make([][]string, len(weeklyContributions))

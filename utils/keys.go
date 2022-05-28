@@ -2,51 +2,51 @@ package utils
 
 import (
 	"github.com/charmbracelet/bubbles/key"
+	"github.com/coloradocolby/gh-eco/ui/context"
 )
 
-// keyMap defines a set of keybindings. To work for help it must satisfy
-// key.Map. It could also very easily be a map[string]key.Binding.
 type KeyMap struct {
 	FocusNext       key.Binding
 	FocusPrev       key.Binding
 	PreviewPageDown key.Binding
 	PreviewPageUp   key.Binding
-	// Copy            key.Binding
-	ExitReadme    key.Binding
-	PreviewReadme key.Binding
-	OpenGithub    key.Binding
-	FocusInput    key.Binding
-	Search        key.Binding
-	Help          key.Binding
-	Quit          key.Binding
+	ToggleReadme    key.Binding
+	OpenGithub      key.Binding
+	FocusInput      key.Binding
+	Search          key.Binding
+	Quit            key.Binding
 }
 
-// ShortHelp returns keybindings to be shown in the mini help view. It's part
-// of the key.Map interface.
-func (k KeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Help}
-}
-
-// FullHelp returns keybindings for the expanded help view. It's part of the
-// key.Map interface.
-func (k KeyMap) FullHelp() [][]key.Binding {
-	return [][]key.Binding{
-		{k.FocusNext, k.FocusPrev},
-		{k.FocusInput, k.Search},
-		{k.OpenGithub, k.PreviewReadme},
-		{k.PreviewPageDown, k.PreviewPageUp},
-		{k.Help, k.Quit},
+func (k KeyMap) ShortHelp(ctx *context.ProgramContext) []key.Binding {
+	bindings := []key.Binding{}
+	switch ctx.Mode {
+	case context.InsertMode:
+		bindings = append(bindings, k.Search)
+	case context.NormalMode:
+		if ctx.User.Login == "" {
+			// user has not yet loaded
+			bindings = append(bindings, k.Search)
+		} else {
+			if ctx.View == context.UserView {
+				bindings = append(bindings, k.FocusInput, k.FocusNext, k.FocusPrev, k.ToggleReadme, k.OpenGithub)
+			} else {
+				bindings = append(bindings, k.FocusNext, k.FocusPrev, k.PreviewPageDown, k.PreviewPageUp, k.ToggleReadme, k.OpenGithub)
+			}
+		}
 	}
+	bindings = append(bindings, k.Quit)
+
+	return bindings
 }
 
 var Keys = KeyMap{
 	FocusPrev: key.NewBinding(
-		key.WithKeys("up", "k"),
-		key.WithHelp("↑/k", "move up"),
+		key.WithKeys("k"),
+		key.WithHelp("k", "move up"),
 	),
 	FocusNext: key.NewBinding(
-		key.WithKeys("down", "j"),
-		key.WithHelp("↓/j", "move down"),
+		key.WithKeys("j"),
+		key.WithHelp("j", "move down"),
 	),
 	PreviewPageUp: key.NewBinding(
 		key.WithKeys("ctrl+u"),
@@ -56,29 +56,17 @@ var Keys = KeyMap{
 		key.WithKeys("ctrl+d"),
 		key.WithHelp("ctrl+d", "preview page down"),
 	),
-	// Copy: key.NewBinding(
-	// 	key.WithKeys("c"),
-	// 	key.WithHelp("c", "copy to clipboard"),
-	// ),
-	ExitReadme: key.NewBinding(
-		key.WithKeys("backspace"),
-		key.WithHelp("backspace", "exit readme"),
-	),
-	PreviewReadme: key.NewBinding(
-		key.WithKeys("p"),
-		key.WithHelp("p", "preview readme"),
+	ToggleReadme: key.NewBinding(
+		key.WithKeys("r"),
+		key.WithHelp("r", "toggle readme"),
 	),
 	OpenGithub: key.NewBinding(
 		key.WithKeys("o"),
 		key.WithHelp("o", "open in github"),
 	),
-	Help: key.NewBinding(
-		key.WithKeys("?"),
-		key.WithHelp("?", "help"),
-	),
 	Quit: key.NewBinding(
-		key.WithKeys("esc", "ctrl+c"),
-		key.WithHelp("esc", "quit"),
+		key.WithKeys("ctrl+c"),
+		key.WithHelp("ctrl+c", "quit"),
 	),
 	Search: key.NewBinding(
 		key.WithKeys("enter"),

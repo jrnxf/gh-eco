@@ -3,13 +3,11 @@ package styles
 import "github.com/charmbracelet/lipgloss"
 
 var (
-	SubtleC    = lipgloss.AdaptiveColor{Light: "#768390", Dark: "#768390"}
-	HighlightC = lipgloss.AdaptiveColor{Light: "#5E81AC", Dark: "#5E81AC"}
-
-	Subtle      = lipgloss.NewStyle().Foreground(SubtleC)
 	Bold        = lipgloss.NewStyle().Bold(true)
-	FocusedBold = Bold.Copy().Background(HighlightC)
-	Faint       = lipgloss.NewStyle().Faint(true)
+	FocusedBold = Bold.Copy().Background(lipgloss.AdaptiveColor{Light: "#5E81AC", Dark: "#5E81AC"})
+
+	Faint     = lipgloss.NewStyle().Faint(true)
+	FaintBold = Faint.Copy().Bold(true)
 
 	roundedBorder = lipgloss.Border{
 		Top:         "─",

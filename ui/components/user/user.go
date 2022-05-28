@@ -2,24 +2,23 @@ package user
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/coloradocolby/gh-eco/api"
-	"github.com/coloradocolby/gh-eco/types/display"
+	"github.com/coloradocolby/gh-eco/ui/commands"
 	"github.com/coloradocolby/gh-eco/ui/components/graph"
 	"github.com/coloradocolby/gh-eco/ui/components/pager"
 	"github.com/coloradocolby/gh-eco/ui/components/repo"
 	"github.com/coloradocolby/gh-eco/ui/context"
+	"github.com/coloradocolby/gh-eco/ui/models"
 	"github.com/coloradocolby/gh-eco/ui/styles"
 	"golang.org/x/term"
 )
 
 type Model struct {
-	User    display.User
+	User    models.User
 	pager   pager.Model
 	display string
 	err     error
@@ -28,7 +27,7 @@ type Model struct {
 
 func NewModel() Model {
 	return Model{
-		User: display.User{},
+		User: models.User{},
 		err:  nil,
 	}
 }
@@ -40,18 +39,16 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	)
 
 	switch msg := msg.(type) {
-	case api.GetUserResponse:
+	case commands.GetUserResponse:
 		if msg.Err != nil {
 			m.err = msg.Err
 		} else {
-			log.Println("context user")
-			log.Println(m.ctx.User)
 			m.User = msg.User
 			m.ctx.User = msg.User
 			m.err = nil
 		}
 		m.buildDisplay()
-	case context.FocusChange:
+	case commands.FocusChange:
 		m.buildDisplay()
 	}
 
@@ -81,7 +78,7 @@ func (m Model) buildUserDisplay() string {
 	}
 
 	if u.Bio != "" {
-		w(styles.Subtle.Copy().Width(80).Align(lipgloss.Center).Render(u.Bio) + "\n\n")
+		w(lipgloss.NewStyle().Faint(true).Width(80).Align(lipgloss.Center).Render(u.Bio) + "\n\n")
 	}
 
 	w(fmt.Sprintf("%v %v · %v %v\n", u.FollowersCount, "followers", u.FollowingCount, "following"))
@@ -95,21 +92,21 @@ func (m Model) buildUserDisplay() string {
 			line = append(line, u.WebsiteUrl)
 		}
 		if u.TwitterUsername != "" {
-			line = append(line, u.TwitterUsername)
+			line = append(line, fmt.Sprintf("@%s", u.TwitterUsername))
 		}
 		w("\n")
 		w(strings.Join(line, "  |  "))
 		w("\n")
 	}
 
-	m.ctx.FocusableWidgets = append(m.ctx.FocusableWidgets, context.FocusableWidget{Type: "UserDisplay", Repo: struct {
-		Url   string
-		Owner string
-		Name  string
+	m.ctx.FocusableWidgets = append(m.ctx.FocusableWidgets, context.FocusableWidget{Type: "UserDisplay", Info: struct {
+		Url      string
+		Owner    string
+		RepoName string
 	}{
-		Url:   m.User.Url,
-		Owner: m.User.Login,
-		Name:  m.User.Login,
+		Url:      m.User.Url,
+		Owner:    m.User.Login,
+		RepoName: m.User.Login,
 	}})
 
 	return b.String()
@@ -151,7 +148,7 @@ func (m *Model) buildDisplay() {
 }
 
 func (m Model) View() string {
-	return m.display
+	return lipgloss.NewStyle().Height(m.ctx.Layout.ContentHeight).Render(m.display)
 }
 
 func (m *Model) UpdateProgramContext(ctx *context.ProgramContext) {

@@ -1,12 +1,15 @@
 package ui
 
 import (
+	"log"
+
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/coloradocolby/gh-eco/api"
+	"github.com/coloradocolby/gh-eco/api/github"
+	"github.com/coloradocolby/gh-eco/ui/commands"
 	"github.com/coloradocolby/gh-eco/ui/components/help"
 	"github.com/coloradocolby/gh-eco/ui/components/pager"
 	"github.com/coloradocolby/gh-eco/ui/components/search"
@@ -17,7 +20,6 @@ import (
 
 type Model struct {
 	keys   utils.KeyMap
-	err    error
 	search search.Model
 	user   user.Model
 	pager  pager.Model
@@ -30,53 +32,39 @@ func New() Model {
 		keys:   utils.Keys,
 		search: search.NewModel(),
 		user:   user.NewModel(),
-		help:   help.NewModel(),
 		pager:  pager.NewModel(),
+		help:   help.NewModel(),
 		ctx: context.ProgramContext{
 			Mode: context.InsertMode,
-			FocusableWidgets: []context.FocusableWidget{
-				{
-					Type: "NoFocus",
-				},
-			},
-			CurrentFocus: context.CurrentFocus{
-				FocusIdx: 0,
-				FocusedWidget: context.FocusableWidget{
-					Type: "NoFocus",
-				},
-			},
 		},
 	}
+
+	m.resetWidgets()
+	m.resetCurrentFocus()
+
+	m.syncProgramContext()
 
 	return m
 }
 
-type initMsg struct {
-	ready bool
-}
-
-func initScreen() tea.Msg {
-	return initMsg{ready: true}
-}
-
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(
-		initScreen,
 		textinput.Blink,
 	)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var (
-		cmd            tea.Cmd
-		spinnerCmd     tea.Cmd
-		searchCmd      tea.Cmd
-		focusChangeCmd tea.Cmd
-		userCmd        tea.Cmd
-		helpCmd        tea.Cmd
-		pagerCmd       tea.Cmd
-		getReadmeCmd   tea.Cmd
-		cmds           []tea.Cmd
+		cmd             tea.Cmd
+		spinnerCmd      tea.Cmd
+		searchCmd       tea.Cmd
+		userCmd         tea.Cmd
+		helpCmd         tea.Cmd
+		pagerCmd        tea.Cmd
+		getReadmeCmd    tea.Cmd
+		focusChangeCmd  tea.Cmd
+		layoutChangeCmd tea.Cmd
+		cmds            []tea.Cmd
 	)
 
 	switch msg := msg.(type) {
@@ -86,27 +74,40 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		switch m.ctx.Mode {
 		case context.NormalMode:
+			info := m.ctx.CurrentFocus.FocusedWidget.Info
+
 			switch {
 			case key.Matches(msg, m.keys.FocusNext):
-				focusChangeCmd = m.FocusNext()
+				focusChangeCmd = m.notifyFocusNextWidget()
 			case key.Matches(msg, m.keys.FocusPrev):
-				focusChangeCmd = m.FocusPrev()
+				focusChangeCmd = m.notifyFocusPrevWidget()
 			case key.Matches(msg, m.keys.OpenGithub):
-				utils.BrowserOpen(m.ctx.CurrentFocus.FocusedWidget.Repo.Url)
-			case key.Matches(msg, m.keys.PreviewReadme):
-				getReadmeCmd = api.GetReadme(m.ctx.CurrentFocus.FocusedWidget.Repo.Name, m.ctx.CurrentFocus.FocusedWidget.Repo.Owner)
-			case key.Matches(msg, m.keys.ExitReadme):
-				m.ctx.View = context.UserView
+				utils.BrowserOpen(info.Url)
+			case key.Matches(msg, m.keys.ToggleReadme):
+				if m.ctx.View == context.UserView {
+					getReadmeCmd = github.GetReadme(info.RepoName, info.Owner)
+				} else {
+					m.ctx.View = context.UserView
+					m.onLayoutChange()
+					layoutChangeCmd = m.notifyLayoutChange()
+				}
+
 			}
 		}
 
-	case api.GetUserResponse:
-	case context.FocusChange:
-		m.ctx.FocusableWidgets = []context.FocusableWidget{
-			{
-				Type: "NoFocus",
-			},
-		}
+	case commands.GetReadmeResponse:
+		m.ctx.View = context.RepoView
+		m.onLayoutChange()
+		layoutChangeCmd = m.notifyLayoutChange()
+
+	case commands.GetUserResponse:
+		m.resetWidgets()
+	case commands.FocusChange:
+		m.resetWidgets()
+
+	case tea.WindowSizeMsg:
+		m.onWindowSizeChanged(msg)
+		m.syncProgramContext()
 	}
 
 	m.syncProgramContext()
@@ -115,28 +116,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.pager, pagerCmd = m.pager.Update(msg)
 	m.user, userCmd = m.user.Update(msg)
 	m.help, helpCmd = m.help.Update(msg)
-	cmds = append(cmds, cmd, spinnerCmd, searchCmd, userCmd, helpCmd, pagerCmd, getReadmeCmd, focusChangeCmd)
+	cmds = append(cmds, cmd, spinnerCmd, searchCmd, userCmd, helpCmd, pagerCmd, getReadmeCmd, focusChangeCmd, layoutChangeCmd)
 	return m, tea.Batch(cmds...)
 }
 
 func (m Model) View() string {
-	if m.err != nil {
-		return m.err.Error()
-	}
 
-	if m.ctx.View == context.RepoView {
-		return m.pager.View()
+	switch m.ctx.View {
+	case context.RepoView:
+		return lipgloss.JoinVertical(lipgloss.Left,
+			m.pager.View(),
+			m.help.View(),
+		)
+	case context.UserView:
+		return lipgloss.JoinVertical(lipgloss.Left,
+			lipgloss.NewStyle().Render(m.search.View()),
+			m.user.View(),
+			m.help.View(),
+		)
+	default:
+		return ""
 	}
-
-	return lipgloss.JoinVertical(lipgloss.Left,
-		lipgloss.NewStyle().PaddingTop(1).Render(m.search.View()),
-		m.user.View(),
-		// m.help.View(),
-		// m.pager.View(),
-	)
 }
 
-func (m *Model) FocusNext() tea.Cmd {
+func (m *Model) notifyFocusNextWidget() tea.Cmd {
 	cf := &m.ctx.CurrentFocus
 
 	numWidgets := len(m.ctx.FocusableWidgets)
@@ -144,11 +147,11 @@ func (m *Model) FocusNext() tea.Cmd {
 	cf.FocusedWidget = m.ctx.FocusableWidgets[cf.FocusIdx]
 
 	return func() tea.Msg {
-		return context.FocusChange{}
+		return commands.FocusChange{}
 	}
 }
 
-func (m *Model) FocusPrev() tea.Cmd {
+func (m *Model) notifyFocusPrevWidget() tea.Cmd {
 	cf := &m.ctx.CurrentFocus
 
 	numWidgets := len(m.ctx.FocusableWidgets)
@@ -156,7 +159,53 @@ func (m *Model) FocusPrev() tea.Cmd {
 	cf.FocusedWidget = m.ctx.FocusableWidgets[cf.FocusIdx]
 
 	return func() tea.Msg {
-		return context.FocusChange{}
+		return commands.FocusChange{}
+	}
+}
+
+func (m Model) notifyLayoutChange() tea.Cmd {
+	return func() tea.Msg {
+		return commands.LayoutChange{}
+	}
+}
+
+func (m *Model) onWindowSizeChanged(msg tea.WindowSizeMsg) {
+	m.ctx.Layout.ScreenHeight = msg.Height
+	m.ctx.Layout.ScreenWidth = msg.Width
+
+	m.ctx.Layout.ContentHeight = msg.Height - lipgloss.Height(m.search.View()) - lipgloss.Height(m.help.View())
+	m.ctx.Layout.ContentWidth = msg.Width
+}
+
+func (m *Model) onLayoutChange() {
+	log.Println("onLayoutChange")
+	contentHeight := m.ctx.Layout.ScreenHeight - lipgloss.Height(m.help.View())
+
+	if m.ctx.View == context.UserView {
+		log.Println("UserView")
+		contentHeight -= lipgloss.Height(m.search.View())
+	} else {
+		log.Println("RepoView")
+	}
+	log.Println(m.ctx.Layout.ScreenHeight - contentHeight)
+	m.ctx.Layout.ContentHeight = contentHeight
+	m.syncProgramContext()
+}
+
+func (m *Model) resetWidgets() {
+	m.ctx.FocusableWidgets = []context.FocusableWidget{
+		{
+			Type: "NoFocus",
+		},
+	}
+}
+
+func (m *Model) resetCurrentFocus() {
+	m.ctx.CurrentFocus = context.CurrentFocus{
+		FocusIdx: 0,
+		FocusedWidget: context.FocusableWidget{
+			Type: "NoFocus",
+		},
 	}
 }
 

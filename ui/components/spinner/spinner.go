@@ -15,7 +15,7 @@ func NewModel() Model {
 	return Model{
 		spinner: spinner.Model{
 			Spinner: spinner.Dot,
-			Style:   lipgloss.NewStyle().Foreground(lipgloss.Color("205")),
+			Style:   lipgloss.NewStyle().Foreground(lipgloss.Color("#5E81AC")),
 		},
 		Tick: spinner.Tick,
 	}

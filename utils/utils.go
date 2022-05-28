@@ -1,16 +1,14 @@
 package utils
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"os/exec"
 	"runtime"
 	"unicode"
 
-	"github.com/charmbracelet/glamour"
-	"github.com/coloradocolby/gh-eco/types/display"
-	"github.com/coloradocolby/gh-eco/types/queries"
+	"github.com/coloradocolby/gh-eco/api/github/queries"
+	"github.com/coloradocolby/gh-eco/ui/models"
 )
 
 func TruncateText(str string, max int) string {
@@ -32,13 +30,6 @@ func TruncateText(str string, max int) string {
 	return str
 }
 
-func JsonToMd(obj interface{}) string {
-	val, _ := json.MarshalIndent(obj, "", "    ")
-	in := "```json\n" + string(val) + "\n```"
-	out, _ := glamour.Render(in, "dark")
-	return out
-}
-
 func BrowserOpen(url string) {
 	var err error
 
@@ -53,13 +44,13 @@ func BrowserOpen(url string) {
 		err = fmt.Errorf("unsupported platform")
 	}
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 }
 
-func MapGetUserQueryToDisplayUser(query queries.GetUser) display.User {
+func MapGetUserQueryToDisplayUser(query queries.GetUserQuery) models.User {
 	qu := query.User
-	du := display.User{
+	du := models.User{
 		Login:           qu.Login,
 		Name:            qu.Name,
 		Location:        qu.Location,
@@ -79,7 +70,7 @@ func MapGetUserQueryToDisplayUser(query queries.GetUser) display.User {
 
 	for _, node := range qu.PinnedItems.Nodes {
 		r := node.Repository
-		du.PinnedRepos = append(du.PinnedRepos, display.Repo{
+		du.PinnedRepos = append(du.PinnedRepos, models.Repo{
 			Id:          r.Id,
 			Name:        r.Name,
 			Description: r.Description,
