@@ -30,13 +30,19 @@ type ProgramContext struct {
 	}
 }
 
+type FocusedWidgetType int
+
+const (
+	NoWidget FocusedWidgetType = iota
+	UserWidget
+	RepoWidget
+)
+
 type FocusableWidget struct {
-	Type string
-	Info struct {
-		Url      string
-		Owner    string
-		RepoName string
-	}
+	Descriptor string
+	Type       FocusedWidgetType
+	Repo       models.Repo
+	User       models.User
 }
 
 type CurrentFocus struct {

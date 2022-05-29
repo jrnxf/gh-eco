@@ -11,7 +11,7 @@ import (
 	"github.com/coloradocolby/gh-eco/api/github"
 	"github.com/coloradocolby/gh-eco/ui/commands"
 	"github.com/coloradocolby/gh-eco/ui/components/help"
-	"github.com/coloradocolby/gh-eco/ui/components/pager"
+	"github.com/coloradocolby/gh-eco/ui/components/markdown"
 	"github.com/coloradocolby/gh-eco/ui/components/search"
 	"github.com/coloradocolby/gh-eco/ui/components/user"
 	"github.com/coloradocolby/gh-eco/ui/context"
@@ -19,21 +19,21 @@ import (
 )
 
 type Model struct {
-	keys   utils.KeyMap
-	search search.Model
-	user   user.Model
-	pager  pager.Model
-	help   help.Model
-	ctx    context.ProgramContext
+	keys     utils.KeyMap
+	search   search.Model
+	user     user.Model
+	markdown markdown.Model
+	help     help.Model
+	ctx      context.ProgramContext
 }
 
 func New() Model {
 	m := Model{
-		keys:   utils.Keys,
-		search: search.NewModel(),
-		user:   user.NewModel(),
-		pager:  pager.NewModel(),
-		help:   help.NewModel(),
+		keys:     utils.Keys,
+		search:   search.NewModel(),
+		user:     user.NewModel(),
+		markdown: markdown.NewModel(),
+		help:     help.NewModel(),
 		ctx: context.ProgramContext{
 			Mode: context.InsertMode,
 		},
@@ -48,8 +48,13 @@ func New() Model {
 }
 
 func (m Model) Init() tea.Cmd {
+	var (
+		cmds []tea.Cmd
+	)
+
+	cmds = append(cmds, textinput.Blink)
 	return tea.Batch(
-		textinput.Blink,
+		cmds...,
 	)
 }
 
@@ -60,8 +65,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		searchCmd       tea.Cmd
 		userCmd         tea.Cmd
 		helpCmd         tea.Cmd
-		pagerCmd        tea.Cmd
+		markdownCmd     tea.Cmd
 		getReadmeCmd    tea.Cmd
+		starRepoCmd     tea.Cmd
+		unstarRepoCmd   tea.Cmd
 		focusChangeCmd  tea.Cmd
 		layoutChangeCmd tea.Cmd
 		cmds            []tea.Cmd
@@ -74,7 +81,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		switch m.ctx.Mode {
 		case context.NormalMode:
-			info := m.ctx.CurrentFocus.FocusedWidget.Info
+			fw := m.ctx.CurrentFocus.FocusedWidget
 
 			switch {
 			case key.Matches(msg, m.keys.FocusNext):
@@ -82,10 +89,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case key.Matches(msg, m.keys.FocusPrev):
 				focusChangeCmd = m.notifyFocusPrevWidget()
 			case key.Matches(msg, m.keys.OpenGithub):
-				utils.BrowserOpen(info.Url)
+				switch fw.Type {
+				case context.UserWidget:
+					utils.BrowserOpen(fw.User.Url)
+				case context.RepoWidget:
+					utils.BrowserOpen(fw.Repo.Url)
+				}
+			case key.Matches(msg, m.keys.StarRepo):
+				if fw.Type == context.RepoWidget {
+					if fw.Repo.ViewerHasStarred {
+						unstarRepoCmd = github.RemoveStarStarrable(fw.Repo.Id)
+						cmds = append(cmds, unstarRepoCmd)
+					} else {
+						starRepoCmd = github.StarStarrable(fw.Repo.Id)
+						cmds = append(cmds, starRepoCmd)
+					}
+				}
+
 			case key.Matches(msg, m.keys.ToggleReadme):
 				if m.ctx.View == context.UserView {
-					getReadmeCmd = github.GetReadme(info.RepoName, info.Owner)
+					switch fw.Type {
+					case context.UserWidget:
+						getReadmeCmd = github.GetReadme(fw.Repo.Name, fw.Repo.Owner.Login)
+					case context.RepoWidget:
+						getReadmeCmd = github.GetReadme(fw.User.Login, fw.User.Login)
+					}
 				} else {
 					m.ctx.View = context.UserView
 					m.onLayoutChange()
@@ -111,12 +139,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	m.syncProgramContext()
-
 	m.search, searchCmd = m.search.Update(msg)
-	m.pager, pagerCmd = m.pager.Update(msg)
+	m.markdown, markdownCmd = m.markdown.Update(msg)
 	m.user, userCmd = m.user.Update(msg)
 	m.help, helpCmd = m.help.Update(msg)
-	cmds = append(cmds, cmd, spinnerCmd, searchCmd, userCmd, helpCmd, pagerCmd, getReadmeCmd, focusChangeCmd, layoutChangeCmd)
+	cmds = append(cmds, cmd, spinnerCmd, searchCmd, userCmd, helpCmd, markdownCmd, getReadmeCmd, focusChangeCmd, layoutChangeCmd)
 	return m, tea.Batch(cmds...)
 }
 
@@ -125,7 +152,7 @@ func (m Model) View() string {
 	switch m.ctx.View {
 	case context.RepoView:
 		return lipgloss.JoinVertical(lipgloss.Left,
-			m.pager.View(),
+			m.markdown.View(),
 			m.help.View(),
 		)
 	case context.UserView:
@@ -195,7 +222,7 @@ func (m *Model) onLayoutChange() {
 func (m *Model) resetWidgets() {
 	m.ctx.FocusableWidgets = []context.FocusableWidget{
 		{
-			Type: "NoFocus",
+			Descriptor: "NoFocus",
 		},
 	}
 }
@@ -204,13 +231,14 @@ func (m *Model) resetCurrentFocus() {
 	m.ctx.CurrentFocus = context.CurrentFocus{
 		FocusIdx: 0,
 		FocusedWidget: context.FocusableWidget{
-			Type: "NoFocus",
+			Descriptor: "NoFocus",
+			Type:       context.NoWidget,
 		},
 	}
 }
 
 func (m *Model) syncProgramContext() {
-	m.pager.UpdateProgramContext(&m.ctx)
+	m.markdown.UpdateProgramContext(&m.ctx)
 	m.search.UpdateProgramContext(&m.ctx)
 	m.user.UpdateProgramContext(&m.ctx)
 	m.help.UpdateProgramContext(&m.ctx)

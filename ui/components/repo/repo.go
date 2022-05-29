@@ -11,7 +11,7 @@ import (
 	"github.com/coloradocolby/gh-eco/utils"
 )
 
-func buildRepoDisplay(repo models.Repo, width int, isFocused bool) string {
+func buildRepoDisplay(repo models.Repo, width int, isFocused bool, viewerHasStarred bool) string {
 	// prep the finished matrix
 	var b strings.Builder
 	w := b.WriteString
@@ -25,8 +25,14 @@ func buildRepoDisplay(repo models.Repo, width int, isFocused bool) string {
 
 	w(fmt.Sprintf("%v %s", utils.TruncateText(repo.Description, 60), strings.Repeat(" ", width)))
 	w("\n")
+
 	coloredCircle := lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: repo.PrimaryLanguage.Color, Dark: repo.PrimaryLanguage.Color}).Render("●")
-	w(fmt.Sprintf("%v %v  ⭑ %v", coloredCircle, repo.PrimaryLanguage.Name, repo.StarsCount))
+
+	star := "⭑"
+	if viewerHasStarred {
+		star = lipgloss.NewStyle().Foreground(lipgloss.Color("#DAAA3F")).Render("⭑")
+	}
+	w(fmt.Sprintf("%v %v  %v %v", coloredCircle, repo.PrimaryLanguage.Name, star, repo.StarsCount))
 
 	return lipgloss.NewStyle().
 		Align(lipgloss.Left).Render(styles.Frame.Render(b.String()))
@@ -49,16 +55,9 @@ func BuildPinnedRepoDisplay(repos []models.Repo, ctx *context.ProgramContext) st
 		currRepoDescLength := len(utils.TruncateText(r.Description, 60))
 
 		widgetName := fmt.Sprintf("PinnedRepo%v", i+1)
-		ctx.FocusableWidgets = append(ctx.FocusableWidgets, context.FocusableWidget{Type: widgetName, Info: struct {
-			Url      string
-			Owner    string
-			RepoName string
-		}{
-			Url:      r.Url,
-			Owner:    r.Owner.Login,
-			RepoName: r.Name,
-		}})
-		d := buildRepoDisplay(r, maxRepoDescLength-currRepoDescLength, ctx.CurrentFocus.FocusedWidget.Type == widgetName) + "\n"
+		ctx.FocusableWidgets = append(ctx.FocusableWidgets, context.FocusableWidget{Type: context.RepoWidget, Repo: r, Descriptor: widgetName})
+		fw := ctx.CurrentFocus.FocusedWidget
+		d := buildRepoDisplay(r, maxRepoDescLength-currRepoDescLength, fw.Descriptor == widgetName, r.ViewerHasStarred) + "\n"
 		if i%2 == 0 {
 			lc.WriteString(d)
 		} else {

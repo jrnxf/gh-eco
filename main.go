@@ -8,9 +8,10 @@ import (
 )
 
 func main() {
+
 	f, _ := tea.LogToFile("debug.log", "")
 
-	log.Printf("\n\n\n\n\n")
+	log.Printf("\n\n\nGH-ECO")
 
 	p := tea.NewProgram(ui.New(), tea.WithAltScreen())
 
@@ -19,4 +20,5 @@ func main() {
 	}
 
 	defer f.Close()
+
 }

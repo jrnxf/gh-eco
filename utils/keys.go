@@ -2,7 +2,6 @@ package utils
 
 import (
 	"github.com/charmbracelet/bubbles/key"
-	"github.com/coloradocolby/gh-eco/ui/context"
 )
 
 type KeyMap struct {
@@ -12,31 +11,11 @@ type KeyMap struct {
 	PreviewPageUp   key.Binding
 	ToggleReadme    key.Binding
 	OpenGithub      key.Binding
+	StarRepo        key.Binding
+	FollowUser      key.Binding
 	FocusInput      key.Binding
 	Search          key.Binding
 	Quit            key.Binding
-}
-
-func (k KeyMap) ShortHelp(ctx *context.ProgramContext) []key.Binding {
-	bindings := []key.Binding{}
-	switch ctx.Mode {
-	case context.InsertMode:
-		bindings = append(bindings, k.Search)
-	case context.NormalMode:
-		if ctx.User.Login == "" {
-			// user has not yet loaded
-			bindings = append(bindings, k.Search)
-		} else {
-			if ctx.View == context.UserView {
-				bindings = append(bindings, k.FocusInput, k.FocusNext, k.FocusPrev, k.ToggleReadme, k.OpenGithub)
-			} else {
-				bindings = append(bindings, k.FocusNext, k.FocusPrev, k.PreviewPageDown, k.PreviewPageUp, k.ToggleReadme, k.OpenGithub)
-			}
-		}
-	}
-	bindings = append(bindings, k.Quit)
-
-	return bindings
 }
 
 var Keys = KeyMap{
@@ -50,11 +29,11 @@ var Keys = KeyMap{
 	),
 	PreviewPageUp: key.NewBinding(
 		key.WithKeys("ctrl+u"),
-		key.WithHelp("ctrl+u", "preview page up"),
+		key.WithHelp("ctrl+u", "page up"),
 	),
 	PreviewPageDown: key.NewBinding(
 		key.WithKeys("ctrl+d"),
-		key.WithHelp("ctrl+d", "preview page down"),
+		key.WithHelp("ctrl+d", "page down"),
 	),
 	ToggleReadme: key.NewBinding(
 		key.WithKeys("r"),
@@ -63,6 +42,14 @@ var Keys = KeyMap{
 	OpenGithub: key.NewBinding(
 		key.WithKeys("o"),
 		key.WithHelp("o", "open in github"),
+	),
+	StarRepo: key.NewBinding(
+		key.WithKeys("s"),
+		key.WithHelp("s", "star repo"),
+	),
+	FollowUser: key.NewBinding(
+		key.WithKeys("f"),
+		key.WithHelp("f", "follow user"),
 	),
 	Quit: key.NewBinding(
 		key.WithKeys("ctrl+c"),

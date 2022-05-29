@@ -2,6 +2,7 @@ package queries
 
 type GetUserQuery struct {
 	User struct {
+		Id              string
 		Login           string
 		Name            string
 		Location        string
@@ -18,12 +19,13 @@ type GetUserQuery struct {
 		PinnedItems struct {
 			Nodes []struct {
 				Repository struct {
-					Id             string
-					Name           string
-					Description    string
-					StargazerCount int
-					Url            string
-					Owner          struct {
+					Id               string
+					Name             string
+					Description      string
+					StargazerCount   int
+					ViewerHasStarred bool
+					Url              string
+					Owner            struct {
 						Login string
 					}
 					PrimaryLanguage struct {

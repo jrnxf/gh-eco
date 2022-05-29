@@ -9,11 +9,11 @@ import (
 
 var (
 	GH_GRAPH_CELL                 = "■ "
-	GH_GRAPH_CELL_NONE            = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#2D333B", Dark: "#2D333B"}).Render(GH_GRAPH_CELL)
-	GH_GRAPH_CELL_FIRST_QUARTILE  = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#006D32", Dark: "#006D32"}).Render(GH_GRAPH_CELL)
-	GH_GRAPH_CELL_SECOND_QUARTILE = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#006D32", Dark: "#006D32"}).Render(GH_GRAPH_CELL)
-	GH_GRAPH_CELL_THIRD_QUARTILE  = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#26A641", Dark: "#26A641"}).Render(GH_GRAPH_CELL)
-	GH_GRAPH_CELL_FOURTH_QUARTILE = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#39D353", Dark: "#39D353"}).Render(GH_GRAPH_CELL)
+	GH_GRAPH_CELL_NONE            = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#EBEDF0", Dark: "#2D333B"}).Render(GH_GRAPH_CELL)
+	GH_GRAPH_CELL_FIRST_QUARTILE  = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#9BE9A8", Dark: "#0E4429"}).Render(GH_GRAPH_CELL)
+	GH_GRAPH_CELL_SECOND_QUARTILE = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#40C463", Dark: "#006D32"}).Render(GH_GRAPH_CELL)
+	GH_GRAPH_CELL_THIRD_QUARTILE  = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#30A14E", Dark: "#26A641"}).Render(GH_GRAPH_CELL)
+	GH_GRAPH_CELL_FOURTH_QUARTILE = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#216E39", Dark: "#39D353"}).Render(GH_GRAPH_CELL)
 )
 
 func BuildGraphDisplay(weeklyContributions []models.WeeklyContribution) string {

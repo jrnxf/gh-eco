@@ -2,6 +2,7 @@ package user
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"strings"
 
@@ -9,7 +10,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/coloradocolby/gh-eco/ui/commands"
 	"github.com/coloradocolby/gh-eco/ui/components/graph"
-	"github.com/coloradocolby/gh-eco/ui/components/pager"
 	"github.com/coloradocolby/gh-eco/ui/components/repo"
 	"github.com/coloradocolby/gh-eco/ui/context"
 	"github.com/coloradocolby/gh-eco/ui/models"
@@ -19,7 +19,6 @@ import (
 
 type Model struct {
 	User    models.User
-	pager   pager.Model
 	display string
 	err     error
 	ctx     *context.ProgramContext
@@ -50,6 +49,33 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.buildDisplay()
 	case commands.FocusChange:
 		m.buildDisplay()
+
+	case commands.StarStarrableResponse:
+		log.Println("received star res")
+		for i, r := range m.ctx.User.PinnedRepos {
+			if r.Id == msg.Starrable.Id {
+				log.Println("operating on ", r.Name)
+				log.Println(msg.Starrable)
+				m.ctx.User.PinnedRepos[i].ViewerHasStarred = msg.Starrable.ViewerHasStarred
+				m.ctx.User.PinnedRepos[i].StarsCount = msg.Starrable.StargazerCount
+				m.ctx.CurrentFocus.FocusedWidget.Repo.ViewerHasStarred = msg.Starrable.ViewerHasStarred
+				m.ctx.CurrentFocus.FocusedWidget.Repo.StarsCount = msg.Starrable.StargazerCount
+			}
+		}
+		m.buildDisplay()
+	case commands.RemoveStarStarrableResponse:
+		log.Println("received unstar res")
+		for i, r := range m.ctx.User.PinnedRepos {
+			if r.Id == msg.Starrable.Id {
+				log.Println("operating on ", r.Name)
+				log.Println(msg.Starrable)
+				m.ctx.User.PinnedRepos[i].ViewerHasStarred = msg.Starrable.ViewerHasStarred
+				m.ctx.User.PinnedRepos[i].StarsCount = msg.Starrable.StargazerCount
+				m.ctx.CurrentFocus.FocusedWidget.Repo.ViewerHasStarred = msg.Starrable.ViewerHasStarred
+				m.ctx.CurrentFocus.FocusedWidget.Repo.StarsCount = msg.Starrable.StargazerCount
+			}
+		}
+		m.buildDisplay()
 	}
 
 	cmds = append(cmds, cmd)
@@ -63,14 +89,14 @@ func (m Model) buildUserDisplay() string {
 	w := b.WriteString
 
 	if u.Name == "" && u.Login != "" {
-		if m.ctx.CurrentFocus.FocusedWidget.Type == "UserDisplay" {
+		if m.ctx.CurrentFocus.FocusedWidget.Descriptor == "UserDisplay" {
 			w(styles.FocusedBold.Render(u.Login) + "\n\n")
 		} else {
 			w(styles.Bold.Render(u.Login) + "\n\n")
 		}
 	}
 	if u.Name != "" {
-		if m.ctx.CurrentFocus.FocusedWidget.Type == "UserDisplay" {
+		if m.ctx.CurrentFocus.FocusedWidget.Descriptor == "UserDisplay" {
 			w(styles.FocusedBold.Render(u.Name) + "\n\n")
 		} else {
 			w(styles.Bold.Render(u.Name) + "\n\n")
@@ -78,7 +104,7 @@ func (m Model) buildUserDisplay() string {
 	}
 
 	if u.Bio != "" {
-		w(lipgloss.NewStyle().Faint(true).Width(80).Align(lipgloss.Center).Render(u.Bio) + "\n\n")
+		w(lipgloss.NewStyle().Faint(true).Align(lipgloss.Center).Render(u.Bio) + "\n\n")
 	}
 
 	w(fmt.Sprintf("%v %v · %v %v\n", u.FollowersCount, "followers", u.FollowingCount, "following"))
@@ -99,15 +125,7 @@ func (m Model) buildUserDisplay() string {
 		w("\n")
 	}
 
-	m.ctx.FocusableWidgets = append(m.ctx.FocusableWidgets, context.FocusableWidget{Type: "UserDisplay", Info: struct {
-		Url      string
-		Owner    string
-		RepoName string
-	}{
-		Url:      m.User.Url,
-		Owner:    m.User.Login,
-		RepoName: m.User.Login,
-	}})
+	m.ctx.FocusableWidgets = append(m.ctx.FocusableWidgets, context.FocusableWidget{Descriptor: "UserDisplay", Type: context.UserWidget, User: m.User})
 
 	return b.String()
 }
@@ -120,7 +138,7 @@ func (m *Model) buildDisplay() {
 
 	u := m.User
 	if m.err != nil {
-		m.pager.Viewport.SetContent("No user found")
+		w("no results")
 	} else {
 
 		w(m.buildUserDisplay())
@@ -140,10 +158,11 @@ func (m *Model) buildDisplay() {
 		w(lipgloss.NewStyle().
 			Align(lipgloss.Center).Render(repo.BuildPinnedRepoDisplay(u.PinnedRepos, m.ctx)))
 
-		m.display = lipgloss.NewStyle().
-			Align(lipgloss.Center).
-			Width(physicalWidth).Render(b.String())
 	}
+
+	m.display = lipgloss.NewStyle().
+		Align(lipgloss.Center).
+		Width(physicalWidth).Render(b.String())
 
 }
 
@@ -155,7 +174,5 @@ func (m *Model) UpdateProgramContext(ctx *context.ProgramContext) {
 	if ctx == nil {
 		return
 	}
-	m.pager.UpdateProgramContext(ctx)
-
 	m.ctx = ctx
 }

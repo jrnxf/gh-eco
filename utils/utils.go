@@ -71,10 +71,11 @@ func MapGetUserQueryToDisplayUser(query queries.GetUserQuery) models.User {
 	for _, node := range qu.PinnedItems.Nodes {
 		r := node.Repository
 		du.PinnedRepos = append(du.PinnedRepos, models.Repo{
-			Id:          r.Id,
-			Name:        r.Name,
-			Description: r.Description,
-			StarsCount:  r.StargazerCount,
+			Id:               r.Id,
+			Name:             r.Name,
+			Description:      r.Description,
+			StarsCount:       r.StargazerCount,
+			ViewerHasStarred: r.ViewerHasStarred,
 			Owner: struct{ Login string }{
 				Login: r.Owner.Login,
 			},

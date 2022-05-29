@@ -3,16 +3,14 @@ module github.com/coloradocolby/gh-eco
 go 1.17
 
 require (
-	// github.com/atotto/clipboard v0.1.4
 	github.com/charmbracelet/bubbles v0.10.3
 	github.com/charmbracelet/bubbletea v0.20.0
+	github.com/charmbracelet/glamour v0.5.0
 	github.com/charmbracelet/lipgloss v0.5.0
 	github.com/cli/go-gh v0.0.3
 	github.com/shurcooL/graphql v0.0.0-20200928012149-18c5c3165e3a
 	golang.org/x/term v0.0.0-20210422114643-f5beecf764ed
 )
-
-require github.com/charmbracelet/glamour v0.5.0
 
 require (
 	github.com/alecthomas/chroma v0.10.0 // indirect

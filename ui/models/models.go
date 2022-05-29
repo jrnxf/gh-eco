@@ -1,6 +1,7 @@
 package models
 
 type User struct {
+	Id              string
 	Login           string
 	Name            string
 	Location        string
@@ -25,12 +26,13 @@ type WeeklyContribution struct {
 }
 
 type Repo struct {
-	Id          string
-	Name        string
-	Description string
-	StarsCount  int
-	Url         string
-	Owner       struct {
+	Id               string
+	Name             string
+	Description      string
+	StarsCount       int
+	ViewerHasStarred bool
+	Url              string
+	Owner            struct {
 		Login string
 	}
 	Readme          Blob
@@ -42,4 +44,10 @@ type Repo struct {
 
 type Blob struct {
 	Text string
+}
+
+type Starrable struct {
+	Id               string
+	StargazerCount   int
+	ViewerHasStarred bool
 }

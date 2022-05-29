@@ -29,9 +29,6 @@ func NewModel() Model {
 	ti.Focus()
 	ti.Placeholder = "search by username"
 
-	// to save during dev time start with my username
-	// ti.SetValue("coloradocolby")
-
 	return Model{
 		keys:      utils.Keys,
 		textInput: ti,
@@ -53,6 +50,14 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 
+	case commands.ProcessArgs:
+		if msg.Username != "" {
+			m.ctx.Mode = context.NormalMode
+			m.textInput.SetCursorMode(textinput.CursorHide)
+			getUserCmd = github.GetUser(msg.Username)
+			m.fetching = true
+			cmds = append(cmds, m.spinner.Tick, getUserCmd)
+		}
 	case tea.KeyMsg:
 		if key.Matches(msg, m.keys.Quit) {
 			cmd = tea.Quit
