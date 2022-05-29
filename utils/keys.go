@@ -52,8 +52,8 @@ var Keys = KeyMap{
 		key.WithHelp("f", "follow user"),
 	),
 	Quit: key.NewBinding(
-		key.WithKeys("ctrl+c"),
-		key.WithHelp("ctrl+c", "quit"),
+		key.WithKeys("esc", "ctrl+c"),
+		key.WithHelp("esc", "quit"),
 	),
 	Search: key.NewBinding(
 		key.WithKeys("enter"),

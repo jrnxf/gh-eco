@@ -1,8 +1,6 @@
 package ui
 
 import (
-	"log"
-
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -85,9 +83,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			switch {
 			case key.Matches(msg, m.keys.FocusNext):
-				focusChangeCmd = m.notifyFocusNextWidget()
+				m.focusNextWidget()
+				focusChangeCmd = m.notifyFocusChange()
+
 			case key.Matches(msg, m.keys.FocusPrev):
-				focusChangeCmd = m.notifyFocusPrevWidget()
+				m.focusPrevWidget()
+				focusChangeCmd = m.notifyFocusChange()
+
+			case key.Matches(msg, m.keys.FocusInput):
+				m.resetCurrentFocus()
+				focusChangeCmd = m.notifyFocusChange()
+
 			case key.Matches(msg, m.keys.OpenGithub):
 				switch fw.Type {
 				case context.UserWidget:
@@ -95,6 +101,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case context.RepoWidget:
 					utils.BrowserOpen(fw.Repo.Url)
 				}
+
 			case key.Matches(msg, m.keys.StarRepo):
 				if fw.Type == context.RepoWidget {
 					if fw.Repo.ViewerHasStarred {
@@ -110,9 +117,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.ctx.View == context.UserView {
 					switch fw.Type {
 					case context.UserWidget:
-						getReadmeCmd = github.GetReadme(fw.Repo.Name, fw.Repo.Owner.Login)
-					case context.RepoWidget:
 						getReadmeCmd = github.GetReadme(fw.User.Login, fw.User.Login)
+					case context.RepoWidget:
+						getReadmeCmd = github.GetReadme(fw.Repo.Name, fw.Repo.Owner.Login)
 					}
 				} else {
 					m.ctx.View = context.UserView
@@ -166,30 +173,27 @@ func (m Model) View() string {
 	}
 }
 
-func (m *Model) notifyFocusNextWidget() tea.Cmd {
+func (m *Model) focusNextWidget() {
 	cf := &m.ctx.CurrentFocus
 
 	numWidgets := len(m.ctx.FocusableWidgets)
 	cf.FocusIdx = (cf.FocusIdx + 1) % numWidgets
 	cf.FocusedWidget = m.ctx.FocusableWidgets[cf.FocusIdx]
-
-	return func() tea.Msg {
-		return commands.FocusChange{}
-	}
 }
 
-func (m *Model) notifyFocusPrevWidget() tea.Cmd {
+func (m *Model) focusPrevWidget() {
 	cf := &m.ctx.CurrentFocus
 
 	numWidgets := len(m.ctx.FocusableWidgets)
 	cf.FocusIdx = (cf.FocusIdx - 1 + numWidgets) % numWidgets
 	cf.FocusedWidget = m.ctx.FocusableWidgets[cf.FocusIdx]
+}
 
+func (m Model) notifyFocusChange() tea.Cmd {
 	return func() tea.Msg {
 		return commands.FocusChange{}
 	}
 }
-
 func (m Model) notifyLayoutChange() tea.Cmd {
 	return func() tea.Msg {
 		return commands.LayoutChange{}
@@ -205,16 +209,12 @@ func (m *Model) onWindowSizeChanged(msg tea.WindowSizeMsg) {
 }
 
 func (m *Model) onLayoutChange() {
-	log.Println("onLayoutChange")
 	contentHeight := m.ctx.Layout.ScreenHeight - lipgloss.Height(m.help.View())
 
 	if m.ctx.View == context.UserView {
-		log.Println("UserView")
 		contentHeight -= lipgloss.Height(m.search.View())
-	} else {
-		log.Println("RepoView")
 	}
-	log.Println(m.ctx.Layout.ScreenHeight - contentHeight)
+
 	m.ctx.Layout.ContentHeight = contentHeight
 	m.syncProgramContext()
 }

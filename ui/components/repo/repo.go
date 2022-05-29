@@ -21,10 +21,10 @@ func buildRepoDisplay(repo models.Repo, width int, isFocused bool, viewerHasStar
 	} else {
 		w(styles.Bold.Render(repo.Name))
 	}
-	w("\n")
+	w(utils.GetNewLines(1))
 
-	w(fmt.Sprintf("%v %s", utils.TruncateText(repo.Description, 60), strings.Repeat(" ", width)))
-	w("\n")
+	w(fmt.Sprintf("%s %s", utils.TruncateText(repo.Description, 60), strings.Repeat(" ", width)))
+	w(utils.GetNewLines(1))
 
 	coloredCircle := lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: repo.PrimaryLanguage.Color, Dark: repo.PrimaryLanguage.Color}).Render("●")
 
@@ -32,7 +32,7 @@ func buildRepoDisplay(repo models.Repo, width int, isFocused bool, viewerHasStar
 	if viewerHasStarred {
 		star = lipgloss.NewStyle().Foreground(lipgloss.Color("#DAAA3F")).Render("⭑")
 	}
-	w(fmt.Sprintf("%v %v  %v %v", coloredCircle, repo.PrimaryLanguage.Name, star, repo.StarsCount))
+	w(fmt.Sprintf("%s %s  %s %v", coloredCircle, repo.PrimaryLanguage.Name, star, repo.StarsCount))
 
 	return lipgloss.NewStyle().
 		Align(lipgloss.Left).Render(styles.Frame.Render(b.String()))
@@ -57,11 +57,11 @@ func BuildPinnedRepoDisplay(repos []models.Repo, ctx *context.ProgramContext) st
 		widgetName := fmt.Sprintf("PinnedRepo%v", i+1)
 		ctx.FocusableWidgets = append(ctx.FocusableWidgets, context.FocusableWidget{Type: context.RepoWidget, Repo: r, Descriptor: widgetName})
 		fw := ctx.CurrentFocus.FocusedWidget
-		d := buildRepoDisplay(r, maxRepoDescLength-currRepoDescLength, fw.Descriptor == widgetName, r.ViewerHasStarred) + "\n"
+		display := buildRepoDisplay(r, maxRepoDescLength-currRepoDescLength, fw.Descriptor == widgetName, r.ViewerHasStarred) + utils.GetNewLines(1)
 		if i%2 == 0 {
-			lc.WriteString(d)
+			lc.WriteString(display)
 		} else {
-			rc.WriteString(d)
+			rc.WriteString(display)
 		}
 	}
 

@@ -48,9 +48,7 @@ func GetReadme(name string, owner string) tea.Cmd {
 			"owner":      graphql.String(owner),
 			"expression": graphql.String("HEAD:README.md"),
 		}
-		log.Println("GetReadme START")
 		err = client.Query("GetReadme", &query, variables)
-		log.Println("GetReadme END")
 		if err != nil {
 			log.Println(err)
 			return commands.GetReadmeResponse{Err: err}
@@ -73,14 +71,11 @@ func StarStarrable(starrableId string) tea.Cmd {
 			"starrableId": graphql.ID(starrableId),
 		}
 
-		log.Println("StarStarrable START")
 		err = client.Mutate("StarStarrable", &mutation, variables)
-		log.Println("StarStarrable END")
 		if err != nil {
 			log.Println(err)
 			return commands.StarStarrableResponse{Err: err}
 		}
-		log.Println(mutation.AddStar.Starrable)
 		return commands.StarStarrableResponse{Starrable: mutation.AddStar.Starrable}
 	}
 }
@@ -99,14 +94,11 @@ func RemoveStarStarrable(starrableId string) tea.Cmd {
 			"starrableId": graphql.ID(starrableId),
 		}
 
-		log.Println("RemoveStarStarrable START")
 		err = client.Mutate("RemoveStarStarrable", &mutation, variables)
-		log.Println("RemoveStarStarrable END")
 		if err != nil {
 			log.Println(err)
 			return commands.RemoveStarStarrableResponse{Err: err}
 		}
-		log.Println(mutation.RemoveStar.Starrable)
 		return commands.RemoveStarStarrableResponse{Starrable: mutation.RemoveStar.Starrable}
 	}
 }

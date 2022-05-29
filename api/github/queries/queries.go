@@ -2,15 +2,18 @@ package queries
 
 type GetUserQuery struct {
 	User struct {
-		Id              string
-		Login           string
-		Name            string
-		Location        string
-		Url             string
-		Bio             string
-		TwitterUsername string
-		WebsiteUrl      string
-		Followers       struct {
+		Id                string
+		Login             string
+		Name              string
+		Location          string
+		Url               string
+		Bio               string
+		TwitterUsername   string
+		IsViewer          bool
+		IsFollowingViewer bool
+		ViewerIsFollowing bool
+		WebsiteUrl        string
+		Followers         struct {
 			TotalCount int
 		}
 		Following struct {

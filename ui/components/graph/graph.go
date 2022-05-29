@@ -5,6 +5,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/coloradocolby/gh-eco/ui/models"
+	"github.com/coloradocolby/gh-eco/utils"
 )
 
 var (
@@ -57,23 +58,25 @@ func transposeSlice(slice [][]string) [][]string {
 
 func generateContributionGraph(slice [][]string) string {
 	var b strings.Builder
+	w := b.WriteString
 
 	for _, row := range slice {
 		for _, cell := range row {
 			switch cell {
 			case "NONE":
-				b.WriteString(GH_GRAPH_CELL_NONE)
+				w(GH_GRAPH_CELL_NONE)
 			case "FIRST_QUARTILE":
-				b.WriteString(GH_GRAPH_CELL_FIRST_QUARTILE)
+				w(GH_GRAPH_CELL_FIRST_QUARTILE)
 			case "SECOND_QUARTILE":
-				b.WriteString(GH_GRAPH_CELL_SECOND_QUARTILE)
+				w(GH_GRAPH_CELL_SECOND_QUARTILE)
 			case "THIRD_QUARTILE":
-				b.WriteString(GH_GRAPH_CELL_THIRD_QUARTILE)
+				w(GH_GRAPH_CELL_THIRD_QUARTILE)
 			case "FOURTH_QUARTILE":
-				b.WriteString(GH_GRAPH_CELL_FOURTH_QUARTILE)
+				w(GH_GRAPH_CELL_FOURTH_QUARTILE)
 			}
 		}
-		b.WriteString("\n")
+
+		w(utils.GetNewLines(1))
 	}
 
 	return b.String()

@@ -6,10 +6,6 @@ type FocusChange struct{}
 
 type LayoutChange struct{}
 
-type ProcessArgs struct {
-	Username string
-}
-
 type ProgramInitMsg struct {
 	Ready bool
 }

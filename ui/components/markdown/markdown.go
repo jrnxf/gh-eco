@@ -7,6 +7,7 @@ import (
 	"github.com/coloradocolby/gh-eco/ui/commands"
 	"github.com/coloradocolby/gh-eco/ui/context"
 	"github.com/coloradocolby/gh-eco/ui/styles"
+	"github.com/coloradocolby/gh-eco/utils"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -71,18 +72,18 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 func (m *Model) calculateViewportDimensions() {
 	m.Viewport.Width = m.ctx.Layout.ContentWidth
-	m.Viewport.Height = m.ctx.Layout.ContentHeight - lipgloss.Height(m.headerView()) - lipgloss.Height(m.footerView())
+	m.Viewport.Height = m.ctx.Layout.ContentHeight - lipgloss.Height(m.footerView())
 }
 
 func (m Model) View() string {
-	return fmt.Sprintf("%s\n%s\n%s", m.headerView(), m.Viewport.View(), m.footerView())
+	return fmt.Sprintf("%s%s%s", m.Viewport.View(), utils.GetNewLines(1), m.footerView())
 }
 
-func (m Model) headerView() string {
-	line := strings.Repeat("─", m.Viewport.Width)
+// func (m Model) headerView() string {
+// 	line := strings.Repeat("─", m.Viewport.Width)
 
-	return styles.FaintBold.Render(line)
-}
+// 	return styles.FaintBold.Render(line)
+// }
 
 func (m Model) footerView() string {
 	scrollPercentage := fmt.Sprintf(" %.f%%", m.Viewport.ScrollPercent()*100)

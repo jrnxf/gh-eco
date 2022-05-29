@@ -2,7 +2,6 @@ package user
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"strings"
 
@@ -14,6 +13,7 @@ import (
 	"github.com/coloradocolby/gh-eco/ui/context"
 	"github.com/coloradocolby/gh-eco/ui/models"
 	"github.com/coloradocolby/gh-eco/ui/styles"
+	"github.com/coloradocolby/gh-eco/utils"
 	"golang.org/x/term"
 )
 
@@ -50,12 +50,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case commands.FocusChange:
 		m.buildDisplay()
 
+	case tea.WindowSizeMsg:
+		m.buildDisplay()
 	case commands.StarStarrableResponse:
-		log.Println("received star res")
 		for i, r := range m.ctx.User.PinnedRepos {
 			if r.Id == msg.Starrable.Id {
-				log.Println("operating on ", r.Name)
-				log.Println(msg.Starrable)
 				m.ctx.User.PinnedRepos[i].ViewerHasStarred = msg.Starrable.ViewerHasStarred
 				m.ctx.User.PinnedRepos[i].StarsCount = msg.Starrable.StargazerCount
 				m.ctx.CurrentFocus.FocusedWidget.Repo.ViewerHasStarred = msg.Starrable.ViewerHasStarred
@@ -64,11 +63,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		m.buildDisplay()
 	case commands.RemoveStarStarrableResponse:
-		log.Println("received unstar res")
 		for i, r := range m.ctx.User.PinnedRepos {
 			if r.Id == msg.Starrable.Id {
-				log.Println("operating on ", r.Name)
-				log.Println(msg.Starrable)
 				m.ctx.User.PinnedRepos[i].ViewerHasStarred = msg.Starrable.ViewerHasStarred
 				m.ctx.User.PinnedRepos[i].StarsCount = msg.Starrable.StargazerCount
 				m.ctx.CurrentFocus.FocusedWidget.Repo.ViewerHasStarred = msg.Starrable.ViewerHasStarred
@@ -89,25 +85,46 @@ func (m Model) buildUserDisplay() string {
 	w := b.WriteString
 
 	if u.Name == "" && u.Login != "" {
+		// user hasn't specified their name on github
 		if m.ctx.CurrentFocus.FocusedWidget.Descriptor == "UserDisplay" {
-			w(styles.FocusedBold.Render(u.Login) + "\n\n")
+			w(styles.FocusedBold.Render(u.Login))
 		} else {
-			w(styles.Bold.Render(u.Login) + "\n\n")
+			w(styles.Bold.Render(u.Login))
+
 		}
+		w(utils.GetNewLines(2))
+
 	}
 	if u.Name != "" {
 		if m.ctx.CurrentFocus.FocusedWidget.Descriptor == "UserDisplay" {
-			w(styles.FocusedBold.Render(u.Name) + "\n\n")
+			w(styles.FocusedBold.Render(u.Name))
 		} else {
-			w(styles.Bold.Render(u.Name) + "\n\n")
+			w(styles.Bold.Render(u.Name))
 		}
+		w(utils.GetNewLines(2))
+
 	}
 
 	if u.Bio != "" {
-		w(lipgloss.NewStyle().Faint(true).Align(lipgloss.Center).Render(u.Bio) + "\n\n")
+		w(lipgloss.NewStyle().Faint(true).Align(lipgloss.Center).Render(u.Bio))
+		w(utils.GetNewLines(2))
 	}
 
-	w(fmt.Sprintf("%v %v · %v %v\n", u.FollowersCount, "followers", u.FollowingCount, "following"))
+	var (
+		viewerIsFollowingStr string
+		isFollowingViewerStr string
+	)
+
+	if u.ViewerIsFollowing {
+		viewerIsFollowingStr = lipgloss.NewStyle().Italic(true).Render(" (you follow)")
+	}
+
+	if u.IsFollowingViewer {
+		isFollowingViewerStr = lipgloss.NewStyle().Italic(true).Render(" (follows you)")
+	}
+
+	w(fmt.Sprintf("%v %s%s / %v %s%s", u.FollowersCount, "followers", viewerIsFollowingStr, u.FollowingCount, "following", isFollowingViewerStr))
+	w(utils.GetNewLines(1))
 
 	if (u.Location != "") || (u.WebsiteUrl != "") || (u.TwitterUsername != "") {
 		line := []string{}
@@ -120,9 +137,10 @@ func (m Model) buildUserDisplay() string {
 		if u.TwitterUsername != "" {
 			line = append(line, fmt.Sprintf("@%s", u.TwitterUsername))
 		}
-		w("\n")
-		w(strings.Join(line, "  |  "))
-		w("\n")
+
+		w(utils.GetNewLines(1))
+		w(strings.Join(line, "  /  "))
+		w(utils.GetNewLines(1))
 	}
 
 	m.ctx.FocusableWidgets = append(m.ctx.FocusableWidgets, context.FocusableWidget{Descriptor: "UserDisplay", Type: context.UserWidget, User: m.User})
@@ -139,21 +157,20 @@ func (m *Model) buildDisplay() {
 	u := m.User
 	if m.err != nil {
 		w("no results")
-	} else {
-
+	} else if m.User.Login != "" {
 		w(m.buildUserDisplay())
 
-		w("\n\n")
+		w(utils.GetNewLines(2))
 
 		w(fmt.Sprintf("%v contributions", u.ActivityGraph.ContributionsCount))
 
-		w("\n")
+		w(utils.GetNewLines(1))
 
 		w(lipgloss.NewStyle().
 			Align(lipgloss.Left).
 			Render(graph.BuildGraphDisplay(u.ActivityGraph.Weeks)))
 
-		w("\n\n")
+		w(utils.GetNewLines(2))
 
 		w(lipgloss.NewStyle().
 			Align(lipgloss.Center).Render(repo.BuildPinnedRepoDisplay(u.PinnedRepos, m.ctx)))

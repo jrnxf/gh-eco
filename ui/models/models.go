@@ -1,19 +1,21 @@
 package models
 
 type User struct {
-	Id              string
-	Login           string
-	Name            string
-	Location        string
-	Url             string
-	Bio             string
-	TwitterUsername string
-	WebsiteUrl      string
-	SelfRepo        Repo
-	FollowersCount  int
-	FollowingCount  int
-	PinnedRepos     []Repo
-	ActivityGraph   struct {
+	Id                string
+	Login             string
+	Name              string
+	Location          string
+	Url               string
+	Bio               string
+	TwitterUsername   string
+	WebsiteUrl        string
+	FollowersCount    int
+	FollowingCount    int
+	IsViewer          bool
+	IsFollowingViewer bool
+	ViewerIsFollowing bool
+	PinnedRepos       []Repo
+	ActivityGraph     struct {
 		ContributionsCount int
 		Weeks              []WeeklyContribution
 	}
