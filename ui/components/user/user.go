@@ -110,20 +110,7 @@ func (m Model) buildUserDisplay() string {
 		w(utils.GetNewLines(2))
 	}
 
-	var (
-		viewerIsFollowingStr string
-		isFollowingViewerStr string
-	)
-
-	if u.ViewerIsFollowing {
-		viewerIsFollowingStr = lipgloss.NewStyle().Italic(true).Render(" (you follow)")
-	}
-
-	if u.IsFollowingViewer {
-		isFollowingViewerStr = lipgloss.NewStyle().Italic(true).Render(" (follows you)")
-	}
-
-	w(fmt.Sprintf("%v %s%s / %v %s%s", u.FollowersCount, "followers", viewerIsFollowingStr, u.FollowingCount, "following", isFollowingViewerStr))
+	w(fmt.Sprintf("%v %s / %v %s", u.FollowersCount, "followers", u.FollowingCount, "following"))
 	w(utils.GetNewLines(1))
 
 	if (u.Location != "") || (u.WebsiteUrl != "") || (u.TwitterUsername != "") {
