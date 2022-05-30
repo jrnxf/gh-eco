@@ -98,3 +98,10 @@ func MapGetUserQueryToDisplayUser(query queries.GetUserQuery) models.User {
 
 	return du
 }
+
+func MaxInt(a, b int) int {
+	if a >= b {
+		return a
+	}
+	return b
+}

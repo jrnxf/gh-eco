@@ -71,40 +71,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		layoutChangeCmd tea.Cmd
 		cmds            []tea.Cmd
 	)
+	fw := m.ctx.CurrentFocus.FocusedWidget
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		if key.Matches(msg, m.keys.Quit) {
 			cmd = tea.Quit
 		}
+
 		switch m.ctx.Mode {
 		case context.NormalMode:
-			fw := m.ctx.CurrentFocus.FocusedWidget
 
-			switch {
-			case key.Matches(msg, m.keys.FocusNext):
-				m.focusNextWidget()
-				focusChangeCmd = m.notifyFocusChange()
+			switch fw.Type {
+			case context.UserWidget:
 
-			case key.Matches(msg, m.keys.FocusPrev):
-				m.focusPrevWidget()
-				focusChangeCmd = m.notifyFocusChange()
-
-			case key.Matches(msg, m.keys.FocusInput):
-				if fw.Type == context.UserWidget {
-					m.resetCurrentFocus()
-					focusChangeCmd = m.notifyFocusChange()
-				}
-			case key.Matches(msg, m.keys.OpenGithub):
-				switch fw.Type {
-				case context.UserWidget:
+				if key.Matches(msg, m.keys.OpenGithub) {
 					utils.BrowserOpen(fw.User.Url)
-				case context.RepoWidget:
-					utils.BrowserOpen(fw.Repo.Url)
 				}
 
-			case key.Matches(msg, m.keys.StarRepo):
-				if fw.Type == context.RepoWidget {
+			case context.RepoWidget:
+
+				switch {
+				case key.Matches(msg, m.keys.OpenGithub):
+					utils.BrowserOpen(fw.Repo.Url)
+
+				case key.Matches(msg, m.keys.StarRepo):
 					if fw.Repo.ViewerHasStarred {
 						unstarRepoCmd = github.RemoveStarStarrable(fw.Repo.Id)
 						cmds = append(cmds, unstarRepoCmd)
@@ -113,22 +104,44 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						cmds = append(cmds, starRepoCmd)
 					}
 				}
+			}
 
-			case key.Matches(msg, m.keys.ToggleReadme):
-				if m.ctx.View == context.UserView {
+			if m.ctx.View == context.UserView {
+				switch {
+				case key.Matches(msg, m.keys.FocusNext):
+					m.focusNextWidget()
+					focusChangeCmd = m.notifyFocusChange()
+
+				case key.Matches(msg, m.keys.FocusPrev):
+					m.focusPrevWidget()
+					focusChangeCmd = m.notifyFocusChange()
+
+				case key.Matches(msg, m.keys.FocusInput):
+					if fw.Type == context.UserWidget {
+						m.resetCurrentFocus()
+						focusChangeCmd = m.notifyFocusChange()
+					}
+				}
+			}
+
+			if key.Matches(msg, m.keys.ToggleReadme) && (fw.Type == context.UserWidget || fw.Type == context.RepoWidget) {
+				switch m.ctx.View {
+				case context.UserView:
 					switch fw.Type {
 					case context.UserWidget:
+						// get the focused users personal readme
 						getReadmeCmd = github.GetReadme(fw.User.Login, fw.User.Login)
 					case context.RepoWidget:
+						// get the focused repos readme
 						getReadmeCmd = github.GetReadme(fw.Repo.Name, fw.Repo.Owner.Login)
 					}
-				} else {
+				case context.ReadmeView:
 					m.ctx.View = context.UserView
 					m.onLayoutChange()
 					layoutChangeCmd = m.notifyLayoutChange()
 				}
-
 			}
+
 		}
 
 	case commands.GetReadmeResponse:

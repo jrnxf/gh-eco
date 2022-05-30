@@ -54,8 +54,8 @@ func (m Model) collectHelpBindings() []key.Binding {
 				} else if fw.Type == context.UserWidget {
 					bindings = append(bindings, k.FollowUser)
 				}
-			} else {
-				bindings = append(bindings, k.FocusNext, k.FocusPrev, k.PreviewPageDown, k.PreviewPageUp, k.ToggleReadme, k.OpenGithub)
+			} else if m.ctx.View == context.ReadmeView {
+				bindings = append(bindings, k.FocusNext, k.FocusPrev, k.PreviewPageDown, k.PreviewPageUp, k.ToggleReadme, k.StarRepo, k.OpenGithub)
 			}
 		}
 	}

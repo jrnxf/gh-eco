@@ -53,6 +53,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 	case commands.GetReadmeResponse:
 		out, _ := m.mdRenderer.Render(msg.Readme.Text)
+		m.Viewport.SetYOffset(0) // scroll to top
 		m.Viewport.SetContent(out)
 
 	case commands.LayoutChange:
@@ -79,24 +80,11 @@ func (m Model) View() string {
 	return fmt.Sprintf("%s%s%s", m.Viewport.View(), utils.GetNewLines(1), m.footerView())
 }
 
-// func (m Model) headerView() string {
-// 	line := strings.Repeat("─", m.Viewport.Width)
-
-// 	return styles.FaintBold.Render(line)
-// }
-
 func (m Model) footerView() string {
 	scrollPercentage := fmt.Sprintf(" %.f%%", m.Viewport.ScrollPercent()*100)
-	line := strings.Repeat("─", max(0, m.Viewport.Width-lipgloss.Width(scrollPercentage)))
+	line := strings.Repeat("─", utils.MaxInt(0, m.Viewport.Width-lipgloss.Width(scrollPercentage)))
 
 	return styles.FaintBold.Render(lipgloss.JoinHorizontal(lipgloss.Center, line, scrollPercentage))
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 func (m *Model) UpdateProgramContext(ctx *context.ProgramContext) {

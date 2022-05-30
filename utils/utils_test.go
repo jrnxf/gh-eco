@@ -42,3 +42,24 @@ func Test_TruncateText(t *testing.T) {
 		}
 	}
 }
+
+type maxIntTest struct {
+	arg1     int
+	arg2     int
+	expected int
+}
+
+func Test_MaxInt(t *testing.T) {
+	var tests = []maxIntTest{
+		{1, 3, 3},
+		{-1, 99, 99},
+		{54, 54, 54},
+		{312, 4, 312},
+	}
+
+	for _, test := range tests {
+		if output := MaxInt(test.arg1, test.arg2); output != test.expected {
+			t.Errorf("Output %q not equal to expected %q", output, test.expected)
+		}
+	}
+}
