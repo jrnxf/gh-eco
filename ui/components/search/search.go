@@ -68,11 +68,14 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			}
 
 		case context.NormalMode:
+			fw := m.ctx.CurrentFocus.FocusedWidget
 			if key.Matches(msg, m.keys.FocusInput) {
-				m.textInput.Reset()
-				m.ctx.Mode = context.InsertMode
-				m.textInput.SetCursorMode(textinput.CursorBlink)
-				return m, textinput.Blink
+				if fw.Type == context.UserWidget {
+					m.textInput.Reset()
+					m.ctx.Mode = context.InsertMode
+					m.textInput.SetCursorMode(textinput.CursorBlink)
+					return m, textinput.Blink
+				}
 			}
 		}
 
@@ -80,7 +83,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.fetching = false
 	}
 
-	if m.ctx.Mode != context.NormalMode {
+	if m.ctx.Mode == context.InsertMode {
 		m.textInput, textInputCmd = m.textInput.Update(msg)
 	}
 

@@ -91,9 +91,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				focusChangeCmd = m.notifyFocusChange()
 
 			case key.Matches(msg, m.keys.FocusInput):
-				m.resetCurrentFocus()
-				focusChangeCmd = m.notifyFocusChange()
-
+				if fw.Type == context.UserWidget {
+					m.resetCurrentFocus()
+					focusChangeCmd = m.notifyFocusChange()
+				}
 			case key.Matches(msg, m.keys.OpenGithub):
 				switch fw.Type {
 				case context.UserWidget:
@@ -131,7 +132,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case commands.GetReadmeResponse:
-		m.ctx.View = context.RepoView
+		m.ctx.View = context.ReadmeView
 		m.onLayoutChange()
 		layoutChangeCmd = m.notifyLayoutChange()
 
@@ -157,7 +158,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) View() string {
 
 	switch m.ctx.View {
-	case context.RepoView:
+	case context.ReadmeView:
 		return lipgloss.JoinVertical(lipgloss.Left,
 			m.markdown.View(),
 			m.help.View(),

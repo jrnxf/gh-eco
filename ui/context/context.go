@@ -13,7 +13,7 @@ type View int
 
 const (
 	UserView View = iota
-	RepoView
+	ReadmeView
 )
 
 type ProgramContext struct {
