@@ -10,6 +10,7 @@ import (
 	"github.com/coloradocolby/gh-eco/ui/commands"
 	"github.com/coloradocolby/gh-eco/ui/components/help"
 	"github.com/coloradocolby/gh-eco/ui/components/markdown"
+	"github.com/coloradocolby/gh-eco/ui/components/message"
 	"github.com/coloradocolby/gh-eco/ui/components/search"
 	"github.com/coloradocolby/gh-eco/ui/components/user"
 	"github.com/coloradocolby/gh-eco/ui/context"
@@ -22,6 +23,7 @@ type Model struct {
 	user     user.Model
 	markdown markdown.Model
 	help     help.Model
+	message  message.Model
 	ctx      context.ProgramContext
 }
 
@@ -32,8 +34,11 @@ func New() Model {
 		user:     user.NewModel(),
 		markdown: markdown.NewModel(),
 		help:     help.NewModel(),
+		message:  message.NewModel(),
 		ctx: context.ProgramContext{
-			Mode: context.InsertMode,
+			Mode:        context.InsertMode,
+			CurrentView: context.UserView,
+			LastView:    context.VoidView,
 		},
 	}
 
@@ -63,6 +68,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		searchCmd       tea.Cmd
 		userCmd         tea.Cmd
 		helpCmd         tea.Cmd
+		messageCmd      tea.Cmd
 		markdownCmd     tea.Cmd
 		getReadmeCmd    tea.Cmd
 		starRepoCmd     tea.Cmd
@@ -71,21 +77,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		layoutChangeCmd tea.Cmd
 		cmds            []tea.Cmd
 	)
-	fw := m.ctx.CurrentFocus.FocusedWidget
+	fw := &m.ctx.CurrentFocus.FocusedWidget
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+
 		if key.Matches(msg, m.keys.Quit) {
 			cmd = tea.Quit
 		}
 
-		switch m.ctx.Mode {
-		case context.NormalMode:
+		if m.ctx.Mode == context.NormalMode && m.ctx.CurrentView != context.MessageView {
 
 			switch fw.Type {
 			case context.UserWidget:
 
-				if key.Matches(msg, m.keys.OpenGithub) {
+				switch {
+				case key.Matches(msg, m.keys.OpenGithub):
 					utils.BrowserOpen(fw.User.Url)
 				}
 
@@ -106,7 +113,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
-			if m.ctx.View == context.UserView {
+			if m.ctx.CurrentView == context.UserView {
+
 				switch {
 				case key.Matches(msg, m.keys.FocusNext):
 					m.focusNextWidget()
@@ -117,7 +125,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					focusChangeCmd = m.notifyFocusChange()
 
 				case key.Matches(msg, m.keys.FocusInput):
-					if fw.Type == context.UserWidget {
+					if m.ctx.CurrentView == context.UserView {
 						m.resetCurrentFocus()
 						focusChangeCmd = m.notifyFocusChange()
 					}
@@ -125,27 +133,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			if key.Matches(msg, m.keys.ToggleReadme) && (fw.Type == context.UserWidget || fw.Type == context.RepoWidget) {
-				switch m.ctx.View {
+
+				switch m.ctx.CurrentView {
 				case context.UserView:
 					switch fw.Type {
 					case context.UserWidget:
 						// get the focused users personal readme
 						getReadmeCmd = github.GetReadme(fw.User.Login, fw.User.Login)
+
 					case context.RepoWidget:
 						// get the focused repos readme
 						getReadmeCmd = github.GetReadme(fw.Repo.Name, fw.Repo.Owner.Login)
 					}
+
 				case context.ReadmeView:
-					m.ctx.View = context.UserView
+					m.ctx.CurrentView = context.UserView
 					m.onLayoutChange()
 					layoutChangeCmd = m.notifyLayoutChange()
 				}
 			}
 
+			if key.Matches(msg, m.keys.StarGhEco) {
+				starRepoCmd = github.StarStarrable(github.GH_ECO_REPO_ID)
+				messageCmd = m.message.TriggerMessage("tysm 🥹", 2)
+				m.ctx.LastView = m.ctx.CurrentView
+				cmds = append(cmds, messageCmd, starRepoCmd)
+			}
 		}
 
 	case commands.GetReadmeResponse:
-		m.ctx.View = context.ReadmeView
+		m.ctx.CurrentView = context.ReadmeView
 		m.onLayoutChange()
 		layoutChangeCmd = m.notifyLayoutChange()
 
@@ -164,24 +181,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.markdown, markdownCmd = m.markdown.Update(msg)
 	m.user, userCmd = m.user.Update(msg)
 	m.help, helpCmd = m.help.Update(msg)
-	cmds = append(cmds, cmd, spinnerCmd, searchCmd, userCmd, helpCmd, markdownCmd, getReadmeCmd, focusChangeCmd, layoutChangeCmd)
+	m.message, messageCmd = m.message.Update(msg)
+	cmds = append(cmds, cmd, spinnerCmd, searchCmd, userCmd, helpCmd, messageCmd, markdownCmd, getReadmeCmd, focusChangeCmd, layoutChangeCmd)
 	return m, tea.Batch(cmds...)
 }
 
 func (m Model) View() string {
 
-	switch m.ctx.View {
+	if m.message.Content != "" {
+		return m.message.View()
+	}
+
+	switch m.ctx.CurrentView {
 	case context.ReadmeView:
 		return lipgloss.JoinVertical(lipgloss.Left,
 			m.markdown.View(),
 			m.help.View(),
 		)
+
 	case context.UserView:
 		return lipgloss.JoinVertical(lipgloss.Left,
 			lipgloss.NewStyle().Render(m.search.View()),
 			m.user.View(),
 			m.help.View(),
 		)
+
 	default:
 		return ""
 	}
@@ -225,7 +249,7 @@ func (m *Model) onWindowSizeChanged(msg tea.WindowSizeMsg) {
 func (m *Model) onLayoutChange() {
 	contentHeight := m.ctx.Layout.ScreenHeight - lipgloss.Height(m.help.View())
 
-	if m.ctx.View == context.UserView {
+	if m.ctx.CurrentView == context.UserView {
 		contentHeight -= lipgloss.Height(m.search.View())
 	}
 
@@ -256,4 +280,5 @@ func (m *Model) syncProgramContext() {
 	m.search.UpdateProgramContext(&m.ctx)
 	m.user.UpdateProgramContext(&m.ctx)
 	m.help.UpdateProgramContext(&m.ctx)
+	m.message.UpdateProgramContext(&m.ctx)
 }

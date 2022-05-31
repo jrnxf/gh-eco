@@ -68,9 +68,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			}
 
 		case context.NormalMode:
-			fw := m.ctx.CurrentFocus.FocusedWidget
 			if key.Matches(msg, m.keys.FocusInput) {
-				if fw.Type == context.UserWidget {
+				if m.ctx.CurrentView == context.UserView {
 					m.textInput.Reset()
 					m.ctx.Mode = context.InsertMode
 					m.textInput.SetCursorMode(textinput.CursorBlink)

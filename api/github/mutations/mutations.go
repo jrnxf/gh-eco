@@ -1,6 +1,6 @@
 package mutations
 
-type StarMutation struct {
+type AddStarMutation struct {
 	AddStar struct {
 		Starrable struct {
 			Id               string

@@ -12,7 +12,7 @@ type KeyMap struct {
 	ToggleReadme    key.Binding
 	OpenGithub      key.Binding
 	StarRepo        key.Binding
-	FollowUser      key.Binding
+	StarGhEco       key.Binding
 	FocusInput      key.Binding
 	Search          key.Binding
 	Quit            key.Binding
@@ -20,11 +20,11 @@ type KeyMap struct {
 
 var Keys = KeyMap{
 	FocusPrev: key.NewBinding(
-		key.WithKeys("k"),
+		key.WithKeys("k", "up"),
 		key.WithHelp("k", "move up"),
 	),
 	FocusNext: key.NewBinding(
-		key.WithKeys("j"),
+		key.WithKeys("j", "down"),
 		key.WithHelp("j", "move down"),
 	),
 	PreviewPageUp: key.NewBinding(
@@ -47,9 +47,9 @@ var Keys = KeyMap{
 		key.WithKeys("s"),
 		key.WithHelp("s", "star repo"),
 	),
-	FollowUser: key.NewBinding(
-		key.WithKeys("f"),
-		key.WithHelp("f", "follow user"),
+	StarGhEco: key.NewBinding(
+		key.WithKeys("!"),
+		key.WithHelp("!", "star gh-eco"),
 	),
 	Quit: key.NewBinding(
 		key.WithKeys("esc", "ctrl+c"),

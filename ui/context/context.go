@@ -12,13 +12,16 @@ const (
 type View int
 
 const (
-	UserView View = iota
+	VoidView View = iota
+	UserView
 	ReadmeView
+	MessageView
 )
 
 type ProgramContext struct {
 	User             models.User
-	View             View
+	CurrentView      View
+	LastView         View
 	Mode             Mode
 	CurrentFocus     CurrentFocus
 	FocusableWidgets []FocusableWidget

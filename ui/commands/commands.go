@@ -6,6 +6,11 @@ type FocusChange struct{}
 
 type LayoutChange struct{}
 
+type SetMessage struct {
+	Content          string
+	SecondsDisplayed int
+}
+
 type ProgramInitMsg struct {
 	Ready bool
 }
