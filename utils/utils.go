@@ -63,15 +63,18 @@ func GetNewLines(n int) string {
 func MapGetUserQueryToDisplayUser(query queries.GetUserQuery) models.User {
 	qu := query.User
 	du := models.User{
-		Login:           qu.Login,
-		Name:            qu.Name,
-		Location:        qu.Location,
-		Url:             qu.Url,
-		Bio:             qu.Bio,
-		TwitterUsername: qu.TwitterUsername,
-		WebsiteUrl:      qu.WebsiteUrl,
-		FollowersCount:  qu.Followers.TotalCount,
-		FollowingCount:  qu.Following.TotalCount,
+		Login:             qu.Login,
+		Name:              qu.Name,
+		Location:          qu.Location,
+		Url:               qu.Url,
+		Bio:               qu.Bio,
+		TwitterUsername:   qu.TwitterUsername,
+		WebsiteUrl:        qu.WebsiteUrl,
+		FollowersCount:    qu.Followers.TotalCount,
+		FollowingCount:    qu.Following.TotalCount,
+		IsViewer:          qu.IsViewer,
+		IsFollowingViewer: qu.IsFollowingViewer,
+		ViewerIsFollowing: qu.ViewerIsFollowing,
 	}
 
 	du.ActivityGraph.ContributionsCount = qu.ContributionsCollection.ContributionCalendar.TotalContributions

@@ -22,7 +22,7 @@
 <details>
    <summary><strong>Manual Installation</strong></summary>
 
-> If you want to install this extension **manually**, follow these steps:
+> If you want to install this extension manually, follow these steps:
 
 1. clone the repo
 
@@ -90,7 +90,7 @@ information.
 
 Check out these amazing projects that inspired `gh-eco`!
 
-- literally everything by [charm.sh](https://charm.sh/) (what gh-eco is built on)
+- anything and everything by [charm.sh](https://charm.sh/) (what gh-eco is built on)
 - [gh-dash](https://github.com/dlvhdr/gh-dash)
 
 ## Follow

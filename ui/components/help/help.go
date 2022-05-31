@@ -46,17 +46,16 @@ func (m Model) collectHelpBindings() []key.Binding {
 			// user has not yet loaded
 			bindings = append(bindings, k.Search)
 		} else {
-			if m.ctx.View == context.UserView {
+			if m.ctx.CurrentView == context.UserView {
 				fw := m.ctx.CurrentFocus.FocusedWidget
 				bindings = append(bindings, k.FocusInput, k.FocusNext, k.FocusPrev, k.ToggleReadme, k.OpenGithub)
 				if fw.Type == context.RepoWidget {
 					bindings = append(bindings, k.StarRepo)
-				} else if fw.Type == context.UserWidget {
-					bindings = append(bindings, k.FollowUser)
 				}
-			} else if m.ctx.View == context.ReadmeView {
+			} else if m.ctx.CurrentView == context.ReadmeView {
 				bindings = append(bindings, k.FocusNext, k.FocusPrev, k.PreviewPageDown, k.PreviewPageUp, k.ToggleReadme, k.StarRepo, k.OpenGithub)
 			}
+			bindings = append(bindings, k.StarGhEco)
 		}
 	}
 	bindings = append(bindings, k.Quit)

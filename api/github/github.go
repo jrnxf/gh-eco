@@ -12,6 +12,8 @@ import (
 	graphql "github.com/shurcooL/graphql"
 )
 
+const GH_ECO_REPO_ID string = "R_kgDOHVAImQ"
+
 func GetUser(login string) tea.Cmd {
 	return func() tea.Msg {
 		client, err := gh.GQLClient(nil)
@@ -65,7 +67,7 @@ func StarStarrable(starrableId string) tea.Cmd {
 			return commands.StarStarrableResponse{Err: err}
 		}
 
-		var mutation mutations.StarMutation
+		var mutation mutations.AddStarMutation
 
 		variables := map[string]interface{}{
 			"starrableId": graphql.ID(starrableId),
