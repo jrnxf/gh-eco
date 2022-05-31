@@ -3,7 +3,7 @@
 🦎 github cli (gh) extension to explore the ecosystem
 
 [![GitHub Go
-Workflow](https://github.com/coloradocolby/gh-eco/actions/workflows/go.yml/badge.svg)](https://github.com/coloradocolby/gh-eco/actions/workflows/build.yml)
+Workflow](https://github.com/coloradocolby/gh-eco/actions/workflows/ci.yml/badge.svg)](https://github.com/coloradocolby/gh-eco/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-MIT-default.svg)](./LICENSE.md) [![Github
 Stars](https://img.shields.io/github/stars/coloradocolby/gh-eco)](https://github.com/coloradocolby/gh-eco/stargazers)
 
