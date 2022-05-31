@@ -1,6 +1,6 @@
 # gh-eco
 
-🦎 github cli (gh) extension to explore the ecosystem
+🦎 gh extension to explore the ecosystem
 
 [![GitHub Go
 Workflow](https://github.com/coloradocolby/gh-eco/actions/workflows/ci.yml/badge.svg)](https://github.com/coloradocolby/gh-eco/actions/workflows/ci.yml)
