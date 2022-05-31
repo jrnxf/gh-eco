@@ -8,7 +8,6 @@ import (
 )
 
 func main() {
-
 	f, _ := tea.LogToFile("debug.log", "")
 
 	p := tea.NewProgram(ui.New(), tea.WithAltScreen(), tea.WithMouseAllMotion())
@@ -18,5 +17,4 @@ func main() {
 	}
 
 	defer f.Close()
-
 }
