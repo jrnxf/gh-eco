@@ -19,3 +19,27 @@ type RemoveStarMutation struct {
 		}
 	} `graphql:"removeStar(input: {starrableId: $starrableId})"`
 }
+
+type FollowUserMutation struct {
+	FollowUser struct {
+		User struct {
+			Id                string
+			ViewerIsFollowing bool
+			Followers         struct {
+				TotalCount int
+			}
+		}
+	} `graphql:"followUser(input: {userId: $userId})"`
+}
+
+type UnfollowUserMutation struct {
+	UnfollowUser struct {
+		User struct {
+			Id                string
+			ViewerIsFollowing bool
+			Followers         struct {
+				TotalCount int
+			}
+		}
+	} `graphql:"unfollowUser(input: {userId: $userId})"`
+}

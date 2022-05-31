@@ -71,6 +71,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		messageCmd      tea.Cmd
 		markdownCmd     tea.Cmd
 		getReadmeCmd    tea.Cmd
+		followUserCmd   tea.Cmd
+		unfollowUserCmd tea.Cmd
 		starRepoCmd     tea.Cmd
 		unstarRepoCmd   tea.Cmd
 		focusChangeCmd  tea.Cmd
@@ -94,6 +96,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				switch {
 				case key.Matches(msg, m.keys.OpenGithub):
 					utils.BrowserOpen(fw.User.Url)
+				// TODO: Contact GH support to see if this is possible. This theoretically
+				// should work, but since this app inherits permissions from the gh cli, which
+				// itself doesn't have the proper scopes requested for this this may not be
+				// possible.
+
+				case key.Matches(msg, m.keys.FollowUser):
+					if fw.User.ViewerIsFollowing {
+						unfollowUserCmd = github.UnfollowUser(fw.User.Id)
+						cmds = append(cmds, unfollowUserCmd)
+					} else {
+						followUserCmd = github.UnfollowUser(fw.User.Id)
+						cmds = append(cmds, followUserCmd)
+					}
 				}
 
 			case context.RepoWidget:

@@ -52,6 +52,25 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 	case tea.WindowSizeMsg:
 		m.buildDisplay()
+
+	case commands.FollowUserResponse:
+		u := &m.ctx.User
+		fw := &m.ctx.CurrentFocus.FocusedWidget
+		u.FollowersCount = msg.User.FollowersCount
+		u.ViewerIsFollowing = msg.User.ViewerIsFollowing
+		fw.User.FollowersCount = msg.User.FollowersCount
+		fw.User.ViewerIsFollowing = msg.User.ViewerIsFollowing
+		m.buildDisplay()
+
+	case commands.UnfollowUserResponse:
+		u := &m.ctx.User
+		fw := &m.ctx.CurrentFocus.FocusedWidget
+		u.FollowersCount = msg.User.FollowersCount
+		u.ViewerIsFollowing = msg.User.ViewerIsFollowing
+		fw.User.FollowersCount = msg.User.FollowersCount
+		fw.User.ViewerIsFollowing = msg.User.ViewerIsFollowing
+		m.buildDisplay()
+
 	case commands.StarStarrableResponse:
 		for i, r := range m.ctx.User.PinnedRepos {
 			if r.Id == msg.Starrable.Id {

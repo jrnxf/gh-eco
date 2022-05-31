@@ -12,6 +12,7 @@ type KeyMap struct {
 	ToggleReadme    key.Binding
 	OpenGithub      key.Binding
 	StarRepo        key.Binding
+	FollowUser      key.Binding
 	StarGhEco       key.Binding
 	FocusInput      key.Binding
 	Search          key.Binding
@@ -42,6 +43,10 @@ var Keys = KeyMap{
 	OpenGithub: key.NewBinding(
 		key.WithKeys("o"),
 		key.WithHelp("o", "open in github"),
+	),
+	FollowUser: key.NewBinding(
+		key.WithKeys("f"),
+		key.WithHelp("f", "follow user"),
 	),
 	StarRepo: key.NewBinding(
 		key.WithKeys("s"),

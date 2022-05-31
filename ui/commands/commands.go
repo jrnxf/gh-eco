@@ -34,3 +34,13 @@ type RemoveStarStarrableResponse struct {
 	Err       error
 	Starrable models.Starrable
 }
+
+type FollowUserResponse struct {
+	Err  error
+	User models.User
+}
+
+type UnfollowUserResponse struct {
+	Err  error
+	User models.User
+}
