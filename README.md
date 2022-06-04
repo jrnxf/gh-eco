@@ -21,6 +21,8 @@ Stars](https://img.shields.io/github/stars/coloradocolby/gh-eco)](https://github
    gh extension install coloradocolby/gh-eco
    ```
 
+Also available on [Nixpkgs](https://search.nixos.org/packages?channel=unstable&from=0&size=50&sort=relevance&type=packages&query=gh-eco)
+
 <details>
    <summary><strong>Manual Installation</strong></summary>
 
