@@ -5,11 +5,11 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/cli/go-gh"
-	"github.com/coloradocolby/gh-eco/api/github/mutations"
-	"github.com/coloradocolby/gh-eco/api/github/queries"
-	"github.com/coloradocolby/gh-eco/ui/commands"
-	"github.com/coloradocolby/gh-eco/utils"
 	graphql "github.com/shurcooL/graphql"
+	"github.com/thatvegandev/gh-eco/api/github/mutations"
+	"github.com/thatvegandev/gh-eco/api/github/queries"
+	"github.com/thatvegandev/gh-eco/ui/commands"
+	"github.com/thatvegandev/gh-eco/utils"
 )
 
 const GH_ECO_REPO_ID string = "R_kgDOHVAImQ"

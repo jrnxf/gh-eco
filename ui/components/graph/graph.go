@@ -4,8 +4,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/coloradocolby/gh-eco/ui/models"
-	"github.com/coloradocolby/gh-eco/utils"
+	"github.com/thatvegandev/gh-eco/ui/models"
+	"github.com/thatvegandev/gh-eco/utils"
 )
 
 var (

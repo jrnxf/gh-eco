@@ -7,13 +7,12 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/coloradocolby/gh-eco/ui/commands"
-	"github.com/coloradocolby/gh-eco/ui/components/graph"
-	"github.com/coloradocolby/gh-eco/ui/components/repo"
-	"github.com/coloradocolby/gh-eco/ui/context"
-	"github.com/coloradocolby/gh-eco/ui/models"
-	"github.com/coloradocolby/gh-eco/ui/styles"
-	"github.com/coloradocolby/gh-eco/utils"
+	"github.com/thatvegandev/gh-eco/ui/commands"
+	"github.com/thatvegandev/gh-eco/ui/components/repo"
+	"github.com/thatvegandev/gh-eco/ui/context"
+	"github.com/thatvegandev/gh-eco/ui/models"
+	"github.com/thatvegandev/gh-eco/ui/styles"
+	"github.com/thatvegandev/gh-eco/utils"
 	"golang.org/x/term"
 )
 
@@ -167,9 +166,9 @@ func (m *Model) buildDisplay() {
 
 		w(utils.GetNewLines(1))
 
-		w(lipgloss.NewStyle().
-			Align(lipgloss.Left).
-			Render(graph.BuildGraphDisplay(u.ActivityGraph.Weeks)))
+		// w(lipgloss.NewStyle().
+		// 	Align(lipgloss.Left).
+		// 	Render(graph.BuildGraphDisplay(u.ActivityGraph.Weeks)))
 
 		w(utils.GetNewLines(2))
 

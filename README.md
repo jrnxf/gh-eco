@@ -3,11 +3,11 @@
 🦎 gh extension to explore the ecosystem
 
 [![GitHub Go
-Workflow](https://github.com/coloradocolby/gh-eco/actions/workflows/ci.yml/badge.svg)](https://github.com/coloradocolby/gh-eco/actions/workflows/ci.yml)
+Workflow](https://github.com/thatvegandev/gh-eco/actions/workflows/ci.yml/badge.svg)](https://github.com/thatvegandev/gh-eco/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-MIT-default.svg)](./LICENSE.md) [![Github
-Stars](https://img.shields.io/github/stars/coloradocolby/gh-eco)](https://github.com/coloradocolby/gh-eco/stargazers)
+Stars](https://img.shields.io/github/stars/thatvegandev/gh-eco)](https://github.com/thatvegandev/gh-eco/stargazers)
 
-![demo](./assets/demo.gif)
+![demo](https://github.com/coloradocolby/assets/raw/main/gh-eco/demo.gif)
 
 ## Installation
 
@@ -18,7 +18,7 @@ Stars](https://img.shields.io/github/stars/coloradocolby/gh-eco)](https://github
 2. Install this extension:
 
    ```sh
-   gh extension install coloradocolby/gh-eco
+   gh extension install thatvegandev/gh-eco
    ```
 
 <details>
@@ -30,10 +30,10 @@ Stars](https://img.shields.io/github/stars/coloradocolby/gh-eco)](https://github
 
    ```sh
    # git
-   git clone https://github.com/coloradocolby/gh-eco
+   git clone https://github.com/thatvegandev/gh-eco
 
    # GitHub CLI
-   gh repo clone coloradocolby/gh-eco
+   gh repo clone thatvegandev/gh-eco
    ```
 
 2. `cd` into it
@@ -121,9 +121,9 @@ this please feel free to open an issue / pull request and start the discussion!
 All contributions are greatly appreciated!
 
 If you have a suggestion that would make `gh-eco` better, please fork the repo and create a [pull
-request](https://github.com/coloradocolby/gh-eco/pulls) or open an issue.
+request](https://github.com/thatvegandev/gh-eco/pulls) or open an issue.
 
-See the [open issues](https://github.com/coloradocolby/gh-eco/issues) for a full list of proposed
+See the [open issues](https://github.com/thatvegandev/gh-eco/issues) for a full list of proposed
 features (and known bugs).
 
 ## License
@@ -139,8 +139,6 @@ Check out these amazing projects that inspired `gh-eco`!
 
 ## Follow
 
-[![github](https://img.shields.io/github/followers/coloradocolby?style=social)](https://github.com/coloradocolby)
-
-[![twitter](https://img.shields.io/twitter/follow/coloradocolby?color=white&style=social)](https://twitter.com/coloradocolby)
-
-[![youtube](https://img.shields.io/youtube/channel/subscribers/UCEDfokz6igeN4bX7Whq49-g?style=social)](https://youtube.com/user/coloradocolby)
+[![github](https://img.shields.io/github/followers/thatvegandev?style=social)](https://github.com/thatvegandev)
+[![twitter](https://img.shields.io/twitter/follow/thatvegandev?color=white&style=social)](https://twitter.com/thatvegandev)
+[![youtube](https://img.shields.io/youtube/channel/subscribers/UCEDfokz6igeN4bX7Whq49-g?style=social)](https://youtube.com/user/thatvegandev)

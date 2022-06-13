@@ -6,15 +6,15 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/coloradocolby/gh-eco/api/github"
-	"github.com/coloradocolby/gh-eco/ui/commands"
-	"github.com/coloradocolby/gh-eco/ui/components/help"
-	"github.com/coloradocolby/gh-eco/ui/components/markdown"
-	"github.com/coloradocolby/gh-eco/ui/components/message"
-	"github.com/coloradocolby/gh-eco/ui/components/search"
-	"github.com/coloradocolby/gh-eco/ui/components/user"
-	"github.com/coloradocolby/gh-eco/ui/context"
-	"github.com/coloradocolby/gh-eco/utils"
+	"github.com/thatvegandev/gh-eco/api/github"
+	"github.com/thatvegandev/gh-eco/ui/commands"
+	"github.com/thatvegandev/gh-eco/ui/components/help"
+	"github.com/thatvegandev/gh-eco/ui/components/markdown"
+	"github.com/thatvegandev/gh-eco/ui/components/message"
+	"github.com/thatvegandev/gh-eco/ui/components/search"
+	"github.com/thatvegandev/gh-eco/ui/components/user"
+	"github.com/thatvegandev/gh-eco/ui/context"
+	"github.com/thatvegandev/gh-eco/utils"
 )
 
 type Model struct {

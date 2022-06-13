@@ -5,10 +5,10 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/coloradocolby/gh-eco/ui/context"
-	"github.com/coloradocolby/gh-eco/ui/models"
-	"github.com/coloradocolby/gh-eco/ui/styles"
-	"github.com/coloradocolby/gh-eco/utils"
+	"github.com/thatvegandev/gh-eco/ui/context"
+	"github.com/thatvegandev/gh-eco/ui/models"
+	"github.com/thatvegandev/gh-eco/ui/styles"
+	"github.com/thatvegandev/gh-eco/utils"
 )
 
 func buildRepoDisplay(repo models.Repo, width int, isFocused bool, viewerHasStarred bool) string {
@@ -65,5 +65,5 @@ func BuildPinnedRepoDisplay(repos []models.Repo, ctx *context.ProgramContext) st
 		}
 	}
 
-	return lipgloss.JoinHorizontal(lipgloss.Top, lc.String(), rc.String())
+	return lipgloss.JoinVertical(lipgloss.Top, lc.String(), rc.String())
 }

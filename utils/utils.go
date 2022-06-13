@@ -8,8 +8,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/coloradocolby/gh-eco/api/github/queries"
-	"github.com/coloradocolby/gh-eco/ui/models"
+	"github.com/thatvegandev/gh-eco/api/github/queries"
+	"github.com/thatvegandev/gh-eco/ui/models"
 )
 
 func TruncateText(str string, max int) string {

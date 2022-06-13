@@ -1,4 +1,4 @@
-module github.com/coloradocolby/gh-eco
+module github.com/thatvegandev/gh-eco
 
 go 1.17
 

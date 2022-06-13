@@ -1,6 +1,6 @@
 package commands
 
-import "github.com/coloradocolby/gh-eco/ui/models"
+import "github.com/thatvegandev/gh-eco/ui/models"
 
 type FocusChange struct{}
 
