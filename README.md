@@ -7,7 +7,7 @@ Workflow](https://github.com/thatvegandev/gh-eco/actions/workflows/ci.yml/badge.
 [![License](https://img.shields.io/badge/License-MIT-default.svg)](./LICENSE.md) [![Github
 Stars](https://img.shields.io/github/stars/thatvegandev/gh-eco)](https://github.com/thatvegandev/gh-eco/stargazers)
 
-![demo](https://github.com/coloradocolby/assets/raw/main/gh-eco/demo.gif)
+![demo](https://github.com/thatvegandev/assets/raw/main/gh-eco/demo.gif)
 
 ## Installation
 

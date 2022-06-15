@@ -65,5 +65,5 @@ func BuildPinnedRepoDisplay(repos []models.Repo, ctx *context.ProgramContext) st
 		}
 	}
 
-	return lipgloss.JoinVertical(lipgloss.Top, lc.String(), rc.String())
+	return lipgloss.JoinHorizontal(lipgloss.Top, lc.String(), rc.String())
 }
