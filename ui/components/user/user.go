@@ -7,13 +7,13 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/thatvegandev/gh-eco/ui/commands"
-	"github.com/thatvegandev/gh-eco/ui/components/graph"
-	"github.com/thatvegandev/gh-eco/ui/components/repo"
-	"github.com/thatvegandev/gh-eco/ui/context"
-	"github.com/thatvegandev/gh-eco/ui/models"
-	"github.com/thatvegandev/gh-eco/ui/styles"
-	"github.com/thatvegandev/gh-eco/utils"
+	"github.com/jrnxf/gh-eco/ui/commands"
+	"github.com/jrnxf/gh-eco/ui/components/graph"
+	"github.com/jrnxf/gh-eco/ui/components/repo"
+	"github.com/jrnxf/gh-eco/ui/context"
+	"github.com/jrnxf/gh-eco/ui/models"
+	"github.com/jrnxf/gh-eco/ui/styles"
+	"github.com/jrnxf/gh-eco/utils"
 	"golang.org/x/term"
 )
 

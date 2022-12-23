@@ -8,11 +8,11 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/thatvegandev/gh-eco/api/github"
-	"github.com/thatvegandev/gh-eco/ui/commands"
-	"github.com/thatvegandev/gh-eco/ui/components/spinner"
-	"github.com/thatvegandev/gh-eco/ui/context"
-	"github.com/thatvegandev/gh-eco/utils"
+	"github.com/jrnxf/gh-eco/api/github"
+	"github.com/jrnxf/gh-eco/ui/commands"
+	"github.com/jrnxf/gh-eco/ui/components/spinner"
+	"github.com/jrnxf/gh-eco/ui/context"
+	"github.com/jrnxf/gh-eco/utils"
 )
 
 type Model struct {

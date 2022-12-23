@@ -1,6 +1,6 @@
 package context
 
-import "github.com/thatvegandev/gh-eco/ui/models"
+import "github.com/jrnxf/gh-eco/ui/models"
 
 type Mode int
 

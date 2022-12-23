@@ -4,7 +4,7 @@ import (
 	"log"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/thatvegandev/gh-eco/ui"
+	"github.com/jrnxf/gh-eco/ui"
 )
 
 func main() {

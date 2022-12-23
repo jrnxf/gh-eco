@@ -5,10 +5,10 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/thatvegandev/gh-eco/ui/context"
-	"github.com/thatvegandev/gh-eco/ui/models"
-	"github.com/thatvegandev/gh-eco/ui/styles"
-	"github.com/thatvegandev/gh-eco/utils"
+	"github.com/jrnxf/gh-eco/ui/context"
+	"github.com/jrnxf/gh-eco/ui/models"
+	"github.com/jrnxf/gh-eco/ui/styles"
+	"github.com/jrnxf/gh-eco/utils"
 )
 
 func buildRepoDisplay(repo models.Repo, width int, isFocused bool, viewerHasStarred bool) string {

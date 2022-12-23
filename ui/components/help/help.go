@@ -5,8 +5,8 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/thatvegandev/gh-eco/ui/context"
-	"github.com/thatvegandev/gh-eco/utils"
+	"github.com/jrnxf/gh-eco/ui/context"
+	"github.com/jrnxf/gh-eco/utils"
 )
 
 type Model struct {

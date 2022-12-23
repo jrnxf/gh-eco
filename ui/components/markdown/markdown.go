@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/thatvegandev/gh-eco/ui/commands"
-	"github.com/thatvegandev/gh-eco/ui/context"
-	"github.com/thatvegandev/gh-eco/ui/styles"
-	"github.com/thatvegandev/gh-eco/utils"
+	"github.com/jrnxf/gh-eco/ui/commands"
+	"github.com/jrnxf/gh-eco/ui/context"
+	"github.com/jrnxf/gh-eco/ui/styles"
+	"github.com/jrnxf/gh-eco/utils"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
