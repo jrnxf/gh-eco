@@ -14,7 +14,6 @@ import (
 	"github.com/jrnxf/gh-eco/ui/commands"
 	"github.com/jrnxf/gh-eco/utils"
 	ghv4 "github.com/shurcooL/githubv4"
-	graphql "github.com/shurcooL/graphql"
 	"golang.org/x/oauth2"
 )
 
@@ -49,8 +48,8 @@ func GetUser(login string) tea.Cmd {
 		var query queries.GetUserQuery
 
 		variables := map[string]interface{}{
-			"login": graphql.String(login),
-			"first": graphql.Int(6),
+			"login": ghv4.String(login),
+			"first": ghv4.Int(6),
 		}
 
 		err := client.Query(context.Background(), &query, variables)
@@ -70,9 +69,9 @@ func GetReadme(name string, owner string) tea.Cmd {
 		var query queries.GetReadmeQuery
 
 		variables := map[string]interface{}{
-			"name":       graphql.String(name),
-			"owner":      graphql.String(owner),
-			"expression": graphql.String("HEAD:README.md"),
+			"name":       ghv4.String(name),
+			"owner":      ghv4.String(owner),
+			"expression": ghv4.String("HEAD:README.md"),
 		}
 
 		err := client.Query(context.Background(), &query, variables)
@@ -91,11 +90,11 @@ func StarStarrable(starrableId string) tea.Cmd {
 
 		var mutation mutations.AddStarMutation
 
-		variables := map[string]interface{}{
-			"starrableId": graphql.ID(starrableId),
+		input := ghv4.AddStarInput{
+			StarrableID: ghv4.ID(starrableId),
 		}
 
-		err := client.Mutate(context.Background(), &mutation, variables, nil)
+		err := client.Mutate(context.Background(), &mutation, input, nil)
 		if err != nil {
 			log.Println(err)
 			return commands.StarStarrableResponse{Err: err}
@@ -111,11 +110,11 @@ func RemoveStarStarrable(starrableId string) tea.Cmd {
 
 		var mutation mutations.RemoveStarMutation
 
-		variables := map[string]interface{}{
-			"starrableId": graphql.ID(starrableId),
+		input := ghv4.RemoveStarInput{
+			StarrableID: ghv4.ID(starrableId),
 		}
 
-		err := client.Mutate(context.Background(), &mutation, variables, nil)
+		err := client.Mutate(context.Background(), &mutation, input, nil)
 		if err != nil {
 			log.Println(err)
 			return commands.RemoveStarStarrableResponse{Err: err}

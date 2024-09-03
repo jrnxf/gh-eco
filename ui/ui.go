@@ -80,6 +80,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	fw := &m.ctx.CurrentFocus.FocusedWidget
 
 	switch msg := msg.(type) {
+
 	case tea.KeyMsg:
 
 		if key.Matches(msg, m.keys.Quit) {
@@ -168,6 +169,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case commands.GetUserResponse:
 		m.resetWidgets()
+
 	case commands.FocusChange:
 		m.resetWidgets()
 

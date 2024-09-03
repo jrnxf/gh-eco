@@ -7,7 +7,7 @@ type AddStarMutation struct {
 			StargazerCount   int
 			ViewerHasStarred bool
 		}
-	} `graphql:"addStar(input: {starrableId: $starrableId})"`
+	} `graphql:"addStar(input: $input)"`
 }
 
 type RemoveStarMutation struct {
@@ -17,5 +17,5 @@ type RemoveStarMutation struct {
 			StargazerCount   int
 			ViewerHasStarred bool
 		}
-	} `graphql:"removeStar(input: {starrableId: $starrableId})"`
+	} `graphql:"removeStar(input: $input)"`
 }

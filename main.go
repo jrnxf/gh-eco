@@ -9,12 +9,12 @@ import (
 
 func main() {
 	f, _ := tea.LogToFile("debug.log", "")
+	defer f.Close()
 
 	p := tea.NewProgram(ui.New(), tea.WithAltScreen(), tea.WithMouseAllMotion())
 
-	if err := p.Start(); err != nil {
+	if _, err := p.Run(); err != nil {
 		log.Fatal(err)
 	}
 
-	defer f.Close()
 }
