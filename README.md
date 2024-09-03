@@ -141,4 +141,4 @@ Check out these amazing projects that inspired `gh-eco`!
 
 [![github](https://img.shields.io/github/followers/jrnxf?style=social)](https://github.com/jrnxf)
 [![twitter](https://img.shields.io/twitter/follow/_jrnxf?color=white&style=social)](https://twitter.com/_jrnxf)
-[![youtube](https://img.shields.io/youtube/channel/subscribers/UCEDfokz6igeN4bX7Whq49-g?style=social)](https://youtube.com/user/thatvegandev)
+[![youtube](https://img.shields.io/youtube/channel/subscribers/UCEDfokz6igeN4bX7Whq49-g?style=social)](https://www.youtube.com/@jrnxf)
