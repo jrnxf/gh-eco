@@ -190,7 +190,7 @@ func (m *Model) buildDisplay() {
 
 		w(lipgloss.NewStyle().
 			Align(lipgloss.Left).
-			Render(graph.BuildGraphDisplay(u.ActivityGraph.Weeks)))
+			Render(graph.BuildGraphDisplay(fitWeeks(u.ActivityGraph.Weeks, physicalWidth))))
 
 		w(utils.GetNewLines(2))
 
@@ -203,6 +203,15 @@ func (m *Model) buildDisplay() {
 		Align(lipgloss.Center).
 		Width(physicalWidth).Render(b.String())
 
+}
+
+// fitWeeks keeps the most recent weeks that fit in width, since each week
+// renders as a 2-col graph column and wider rows would wrap.
+func fitWeeks(weeks []models.WeeklyContribution, width int) []models.WeeklyContribution {
+	if maxWeeks := width / 2; width > 0 && len(weeks) > maxWeeks {
+		return weeks[len(weeks)-maxWeeks:]
+	}
+	return weeks
 }
 
 func (m Model) View() string {
