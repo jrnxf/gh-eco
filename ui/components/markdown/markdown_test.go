@@ -29,11 +29,19 @@ func Test_ReadmeTableFitsViewport(t *testing.T) {
 	if m.Viewport.Width != 80 {
 		t.Fatalf("viewport width = %d, want 80", m.Viewport.Width)
 	}
-	// check the rendered readme itself: the viewport would hide overflow
-	// by wrapping it onto extra lines
-	for _, line := range strings.Split(m.renderReadme(), "\n") {
+	// a stale wider render would be wrapped by the viewport onto extra
+	// lines, so the visible lines must match a fresh 80-col render
+	want := strings.Split(m.renderReadme(), "\n")
+	got := strings.Split(m.Viewport.View(), "\n")
+	if len(got) < len(want) {
+		t.Fatalf("viewport shows %d lines, want at least %d", len(got), len(want))
+	}
+	for i, line := range want {
 		if w := lipgloss.Width(line); w > 80 {
 			t.Fatalf("readme line is %d cols wide in an 80-col viewport: %q", w, line)
+		}
+		if g, l := strings.TrimRight(got[i], " "), strings.TrimRight(line, " "); g != l {
+			t.Fatalf("viewport line %d = %q, want %q", i, g, l)
 		}
 	}
 }
