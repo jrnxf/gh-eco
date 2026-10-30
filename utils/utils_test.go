@@ -62,7 +62,7 @@ func Test_MaxInt(t *testing.T) {
 
 	for _, test := range tests {
 		if output := MaxInt(test.arg1, test.arg2); output != test.expected {
-			t.Errorf("Output %q not equal to expected %q", output, test.expected)
+			t.Errorf("Output %d not equal to expected %d", output, test.expected)
 		}
 	}
 }
