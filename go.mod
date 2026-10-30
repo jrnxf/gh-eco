@@ -8,7 +8,7 @@ require (
 	github.com/charmbracelet/glamour v1.0.0
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/shurcooL/githubv4 v0.0.0-20240727222349-48295856cce7
-	golang.org/x/oauth2 v0.22.0
+	golang.org/x/oauth2 v0.37.0
 	golang.org/x/term v0.47.0
 )
 
