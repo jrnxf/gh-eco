@@ -1,6 +1,8 @@
 package models
 
+// User is a GitHub user or, when IsOrganization is set, an organization.
 type User struct {
+	IsOrganization    bool
 	Id                string
 	Login             string
 	Name              string

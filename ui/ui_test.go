@@ -2,20 +2,19 @@ package ui
 
 import (
 	"context"
-	"errors"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/jrnxf/gh-eco/api/github"
 	"github.com/jrnxf/gh-eco/models"
 	"github.com/jrnxf/gh-eco/ui/commands"
 	"github.com/jrnxf/gh-eco/ui/state"
 )
-
-var errNotFound = errors.New("not found")
 
 // fakeClient serves canned users and records every call.
 type fakeClient struct {
@@ -42,7 +41,7 @@ func (f *fakeClient) User(_ context.Context, login string) (models.User, error) 
 	if u, ok := f.users[login]; ok {
 		return u, nil
 	}
-	return models.User{}, errNotFound
+	return models.User{}, github.ErrNotFound
 }
 
 func (f *fakeClient) Readme(_ context.Context, owner, name string) (string, error) {
@@ -50,7 +49,12 @@ func (f *fakeClient) Readme(_ context.Context, owner, name string) (string, erro
 	if r, ok := f.readmes[owner+"/"+name]; ok {
 		return r, nil
 	}
-	return "", errNotFound
+	return "", github.ErrNotFound
+}
+
+func (f *fakeClient) OrgReadme(_ context.Context, org string) (string, error) {
+	f.record("org readme " + org)
+	return "# " + org, nil
 }
 
 func (f *fakeClient) Star(_ context.Context, id string) (models.Starrable, error) {
@@ -228,5 +232,67 @@ func Test_ReadmeToggle(t *testing.T) {
 	}
 	if r := m.state.FocusedRepo(); r == nil || r.Id != "B" {
 		t.Errorf("focus moved to %+v while reading", r)
+	}
+}
+
+func Test_FailedSearchClearsPreviousUser(t *testing.T) {
+	client := &fakeClient{users: map[string]models.User{"octocat": octocat()}}
+	m := newModel(t, client)
+	m, res := lookup(t, m, "octocat")
+	m, _ = send(m, res)
+	m, _ = send(m, keyRunes("j"))
+
+	m, _ = send(m, keyRunes("/"))
+	m, res = lookup(t, m, "ghost")
+	m, _ = send(m, res)
+
+	if m.state.User.Login != "" || m.state.Focused().Kind != state.NoTarget {
+		t.Errorf("octocat is still loaded after a failed search: %+v", m.state.User)
+	}
+	view := m.View()
+	if !strings.Contains(view, `no user or organization named "ghost"`) {
+		t.Errorf("view does not say ghost was not found:\n%s", view)
+	}
+	if strings.Contains(view, "toggle readme") {
+		t.Errorf("help bar still offers actions on the previous user")
+	}
+
+	// keys meant for the old user do nothing
+	_, msgs := send(m, keyRunes("r"))
+	if len(msgs) != 0 || client.called("readme octocat/octocat") {
+		t.Errorf("r after a failed search fetched %v", client.calls)
+	}
+}
+
+func Test_OrganizationProfile(t *testing.T) {
+	acme := models.User{
+		IsOrganization: true,
+		Login:          "acme",
+		Name:           "Acme",
+		Bio:            "we make things",
+		PinnedRepos:    []models.Repo{{Id: "R_9", Name: "anvil", Owner: struct{ Login string }{"acme"}}},
+	}
+	client := &fakeClient{users: map[string]models.User{"acme": acme}}
+	m := newModel(t, client)
+	m, res := lookup(t, m, "acme")
+	m, _ = send(m, res)
+
+	view := m.View()
+	for _, want := range []string{"Acme", "we make things", "anvil"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("view lacks %q", want)
+		}
+	}
+	for _, unwanted := range []string{"followers", "contributions"} {
+		if strings.Contains(view, unwanted) {
+			t.Errorf("organization view shows %q", unwanted)
+		}
+	}
+
+	m, _ = send(m, keyRunes("j"))
+	m, msgs := send(m, keyRunes("r"))
+	m, _ = send(m, find[commands.GetReadmeResponse](t, msgs))
+	if !client.called("org readme acme") || m.state.CurrentView != state.ReadmeView {
+		t.Errorf("r on an organization must open its profile readme: calls %v", client.calls)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -94,12 +95,12 @@ func newFake(t *testing.T, fake *fakeGitHub) *Client {
 	return c
 }
 
-const userQuery = `query GetUser($first:Int!$login:String!){user(login: $login){id,login,name,location,url,bio,twitterUsername,isViewer,isFollowingViewer,viewerIsFollowing,websiteUrl,followers{totalCount},following{totalCount},pinnedItems(first: $first, types: [REPOSITORY]){nodes{... on Repository{id,name,description,stargazerCount,viewerHasStarred,url,owner{login},primaryLanguage{name,color}}}},contributionsCollection{contributionCalendar{totalContributions,weeks{contributionDays{contributionLevel}}}}}}`
+const ownerQuery = `query GetOwner($first:Int!$login:String!){repositoryOwner(login: $login){__typename,... on User{login,name,location,url,bio,twitterUsername,isViewer,isFollowingViewer,viewerIsFollowing,websiteUrl,followers{totalCount},following{totalCount},pinnedItems(first: $first, types: [REPOSITORY]){nodes{... on Repository{id,name,description,stargazerCount,viewerHasStarred,url,owner{login},primaryLanguage{name,color}}}},contributionsCollection{contributionCalendar{totalContributions,weeks{contributionDays{contributionLevel}}}}},... on Organization{login,name,location,url,description,twitterUsername,websiteUrl,pinnedItems(first: $first, types: [REPOSITORY]){nodes{... on Repository{id,name,description,stargazerCount,viewerHasStarred,url,owner{login},primaryLanguage{name,color}}}}}}}`
 
 // userResponse is shaped like a real response: a pinned gist matches no
 // fragment and arrives as an empty object, and a repo can lack a language.
-const userResponse = `{"data":{"user":{
-  "id":"U_1","login":"octocat","name":"Mona","location":"Lisbon","url":"https://github.com/octocat",
+const userResponse = `{"data":{"repositoryOwner":{
+  "__typename":"User","login":"octocat","name":"Mona","location":"Lisbon","url":"https://github.com/octocat",
   "bio":"hi","twitterUsername":"","isViewer":false,"isFollowingViewer":true,"viewerIsFollowing":false,
   "websiteUrl":"https://example.com","followers":{"totalCount":12},"following":{"totalCount":3},
   "pinnedItems":{"nodes":[
@@ -115,8 +116,8 @@ const userResponse = `{"data":{"user":{
   ]}}
 }}}`
 
-func Test_UserQueryContract(t *testing.T) {
-	fake := &fakeGitHub{graphql: map[string]string{"GetUser": userResponse}}
+func Test_UserLookupContract(t *testing.T) {
+	fake := &fakeGitHub{graphql: map[string]string{"GetOwner": userResponse}}
 	c := newFake(t, fake)
 
 	u, err := c.User(context.Background(), "octocat")
@@ -125,8 +126,8 @@ func Test_UserQueryContract(t *testing.T) {
 	}
 
 	req := fake.requests[0]
-	if req.query != userQuery {
-		t.Errorf("query changed:\n got %s\nwant %s", req.query, userQuery)
+	if req.query != ownerQuery {
+		t.Errorf("query changed:\n got %s\nwant %s", req.query, ownerQuery)
 	}
 	if req.variables["login"] != "octocat" || req.variables["first"] != float64(6) {
 		t.Errorf("variables = %v", req.variables)
@@ -144,6 +145,45 @@ func Test_UserQueryContract(t *testing.T) {
 	if u.ActivityGraph.ContributionsCount != 42 || len(u.ActivityGraph.Weeks) != 1 ||
 		u.ActivityGraph.Weeks[0].ContributionDays[1].ContributionLevel != "FOURTH_QUARTILE" {
 		t.Errorf("activity graph mapped wrong: %+v", u.ActivityGraph)
+	}
+}
+
+func Test_OrganizationLookup(t *testing.T) {
+	fake := &fakeGitHub{graphql: map[string]string{"GetOwner": `{"data":{"repositoryOwner":{
+	  "__typename":"Organization","login":"acme","name":"Acme","description":"we make things",
+	  "location":"","url":"https://github.com/acme","twitterUsername":"acme","websiteUrl":"",
+	  "pinnedItems":{"nodes":[{"id":"R_9","name":"anvil","description":"","stargazerCount":7,
+	    "viewerHasStarred":false,"url":"https://github.com/acme/anvil","owner":{"login":"acme"},
+	    "primaryLanguage":{"name":"Rust","color":"#dea584"}}]}}}}`}}
+	c := newFake(t, fake)
+
+	u, err := c.User(context.Background(), "acme")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !u.IsOrganization || u.Login != "acme" || u.Bio != "we make things" || u.TwitterUsername != "acme" {
+		t.Errorf("organization mapped wrong: %+v", u)
+	}
+	if len(u.PinnedRepos) != 1 || u.PinnedRepos[0].Name != "anvil" {
+		t.Errorf("pinned repos = %+v", u.PinnedRepos)
+	}
+}
+
+func Test_UnknownLoginIsNotFound(t *testing.T) {
+	// GitHub answers an unknown login with a null owner, not an error
+	fake := &fakeGitHub{graphql: map[string]string{"GetOwner": `{"data":{"repositoryOwner":null}}`}}
+	c := newFake(t, fake)
+
+	if _, err := c.User(context.Background(), "ghost"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("err = %v, want ErrNotFound", err)
+	}
+}
+
+func Test_ServerErrorIsNotNotFound(t *testing.T) {
+	c := newFake(t, &fakeGitHub{}) // answers 404 to everything
+	_, err := c.User(context.Background(), "octocat")
+	if err == nil || errors.Is(err, ErrNotFound) {
+		t.Errorf("err = %v, want a transport error distinct from ErrNotFound", err)
 	}
 }
 
@@ -183,7 +223,8 @@ func Test_StarMutationContract(t *testing.T) {
 func Test_ReadmeIsFetchedOncePerRepo(t *testing.T) {
 	encoded := base64.StdEncoding.EncodeToString([]byte("# hello"))
 	fake := &fakeGitHub{rest: map[string]string{
-		"/repos/octocat/hello-world/readme": `{"content":"` + encoded + `","encoding":"base64"}`,
+		"/repos/octocat/hello-world/readme":              `{"content":"` + encoded + `","encoding":"base64"}`,
+		"/repos/acme/.github/contents/profile/README.md": `{"content":"` + encoded + `","encoding":"base64"}`,
 	}}
 	c := newFake(t, fake)
 
@@ -200,7 +241,14 @@ func Test_ReadmeIsFetchedOncePerRepo(t *testing.T) {
 		t.Errorf("missing readme returned no error the second time")
 	}
 
-	if n := len(fake.requests); n != 3 {
-		t.Errorf("made %d requests, want 1 for the cached readme and 2 for the uncached miss", n)
+	if _, err := c.OrgReadme(context.Background(), "acme"); err != nil {
+		t.Errorf("org readme: %v", err)
+	}
+	if fake.requests[len(fake.requests)-1].path != "/repos/acme/.github/contents/profile/README.md" {
+		t.Errorf("org readme fetched from %s", fake.requests[len(fake.requests)-1].path)
+	}
+
+	if n := len(fake.requests); n != 4 {
+		t.Errorf("made %d requests, want 1 for the cached readme, 2 for the uncached miss and 1 for the org", n)
 	}
 }

@@ -45,8 +45,8 @@ func (m Model) collectHelpBindings() []key.Binding {
 		bindings = append(bindings, k.Search)
 	case state.NormalMode:
 		if s.User.Login == "" {
-			// user has not yet loaded
-			bindings = append(bindings, k.Search)
+			// loading, or the search failed
+			bindings = append(bindings, k.FocusInput)
 		} else {
 			if s.CurrentView == state.UserView {
 				bindings = append(bindings, k.FocusInput, k.FocusNext, k.FocusPrev, k.ToggleReadme, k.OpenGithub)

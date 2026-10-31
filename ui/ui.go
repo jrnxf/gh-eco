@@ -25,6 +25,7 @@ import (
 type Client interface {
 	User(ctx context.Context, login string) (models.User, error)
 	Readme(ctx context.Context, owner, name string) (string, error)
+	OrgReadme(ctx context.Context, org string) (string, error)
 	Star(ctx context.Context, id string) (models.Starrable, error)
 	Unstar(ctx context.Context, id string) (models.Starrable, error)
 }
@@ -86,10 +87,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// a newer search superseded this one
 			return m, nil
 		}
-		if msg.Err == nil {
-			s.User = msg.User
-			s.Focus = 0
-		}
+		// a failed search clears the previous user, so nothing acts on it
+		s.User = msg.User
+		s.Focus = 0
 
 	case commands.GetReadmeResponse:
 		if msg.Err != nil {
@@ -166,8 +166,7 @@ func (m *Model) handleNormalKey(msg tea.KeyMsg) tea.Cmd {
 		case state.UserView:
 			switch target.Kind {
 			case state.UserTarget:
-				// a user's profile readme lives in the repo named after them
-				return fetchReadme(m.client, s.User.Login, s.User.Login)
+				return fetchProfileReadme(m.client, s.User)
 			case state.RepoTarget:
 				r := s.FocusedRepo()
 				return fetchReadme(m.client, r.Owner.Login, r.Name)
@@ -228,13 +227,25 @@ func (m Model) View() string {
 func fetchUser(c Client, login string, req int) tea.Cmd {
 	return func() tea.Msg {
 		u, err := c.User(context.Background(), login)
-		return commands.GetUserResponse{Req: req, User: u, Err: err}
+		return commands.GetUserResponse{Req: req, Login: login, User: u, Err: err}
 	}
 }
 
 func fetchReadme(c Client, owner, name string) tea.Cmd {
 	return func() tea.Msg {
 		text, err := c.Readme(context.Background(), owner, name)
+		return commands.GetReadmeResponse{Readme: text, Err: err}
+	}
+}
+
+// fetchProfileReadme fetches the readme shown on a profile: a user's lives
+// in the repo named after them, an organization's in its .github repo.
+func fetchProfileReadme(c Client, u models.User) tea.Cmd {
+	if !u.IsOrganization {
+		return fetchReadme(c, u.Login, u.Login)
+	}
+	return func() tea.Msg {
+		text, err := c.OrgReadme(context.Background(), u.Login)
 		return commands.GetReadmeResponse{Readme: text, Err: err}
 	}
 }

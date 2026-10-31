@@ -16,9 +16,10 @@ type SearchSubmitted struct {
 
 type GetUserResponse struct {
 	// Req identifies the lookup; responses to superseded lookups are dropped.
-	Req  int
-	User models.User
-	Err  error
+	Req   int
+	Login string
+	User  models.User
+	Err   error
 }
 
 type GetReadmeResponse struct {

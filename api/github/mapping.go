@@ -5,8 +5,20 @@ import (
 	"github.com/jrnxf/gh-eco/models"
 )
 
-func mapUser(query queries.GetUserQuery) models.User {
-	qu := query.User
+// mapOwner maps a repositoryOwner lookup; ok is false when no user or
+// organization has the login.
+func mapOwner(query queries.GetOwnerQuery) (u models.User, ok bool) {
+	owner := query.RepositoryOwner
+	switch owner.Typename {
+	case "User":
+		return mapUser(owner.User), true
+	case "Organization":
+		return mapOrganization(owner.Organization), true
+	}
+	return models.User{}, false
+}
+
+func mapUser(qu queries.User) models.User {
 	u := models.User{
 		Login:             qu.Login,
 		Name:              qu.Name,
@@ -20,20 +32,39 @@ func mapUser(query queries.GetUserQuery) models.User {
 		IsViewer:          qu.IsViewer,
 		IsFollowingViewer: qu.IsFollowingViewer,
 		ViewerIsFollowing: qu.ViewerIsFollowing,
+		PinnedRepos:       mapPinned(qu.PinnedItems),
 	}
 
 	u.ActivityGraph.ContributionsCount = qu.ContributionsCollection.ContributionCalendar.TotalContributions
 	for _, week := range qu.ContributionsCollection.ContributionCalendar.Weeks {
 		u.ActivityGraph.Weeks = append(u.ActivityGraph.Weeks, week)
 	}
+	return u
+}
 
-	for _, node := range qu.PinnedItems.Nodes {
+func mapOrganization(qo queries.Organization) models.User {
+	return models.User{
+		IsOrganization:  true,
+		Login:           qo.Login,
+		Name:            qo.Name,
+		Location:        qo.Location,
+		Url:             qo.Url,
+		Bio:             qo.Description,
+		TwitterUsername: qo.TwitterUsername,
+		WebsiteUrl:      qo.WebsiteUrl,
+		PinnedRepos:     mapPinned(qo.PinnedItems),
+	}
+}
+
+func mapPinned(items queries.PinnedItems) []models.Repo {
+	var repos []models.Repo
+	for _, node := range items.Nodes {
 		r := node.Repository
 		if r.Id == "" {
 			// a pinned gist: only the Repository fragment is queried
 			continue
 		}
-		u.PinnedRepos = append(u.PinnedRepos, models.Repo{
+		repos = append(repos, models.Repo{
 			Id:               r.Id,
 			Name:             r.Name,
 			Description:      r.Description,
@@ -44,6 +75,5 @@ func mapUser(query queries.GetUserQuery) models.User {
 			PrimaryLanguage:  r.PrimaryLanguage,
 		})
 	}
-
-	return u
+	return repos
 }

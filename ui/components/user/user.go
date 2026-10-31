@@ -1,12 +1,14 @@
 package user
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/jrnxf/gh-eco/api/github"
 	"github.com/jrnxf/gh-eco/models"
 	"github.com/jrnxf/gh-eco/ui/commands"
 	"github.com/jrnxf/gh-eco/ui/components/graph"
@@ -20,11 +22,16 @@ import (
 // last column would then wrap and shift the whole frame down.
 const rightSlack = 2
 
+// maxErrorWidth wraps long error messages to a readable width.
+const maxErrorWidth = 60
+
 // wheelLines is how far one mouse wheel step scrolls.
 const wheelLines = 3
 
 type Model struct {
 	lines []string
+	// login is the latest search.
+	login string
 	// offset is the first visible line.
 	offset int
 	// focus is the focus the scroll position was last fitted to.
@@ -42,7 +49,7 @@ func NewModel(s *state.State) Model {
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case commands.GetUserResponse:
-		m.err = msg.Err
+		m.login, m.err = msg.Login, msg.Err
 		m.offset = 0
 	case tea.MouseMsg:
 		if msg.Action == tea.MouseActionPress {
@@ -64,16 +71,22 @@ func (m *Model) build() {
 
 	var blocks []string
 	switch {
+	case errors.Is(m.err, github.ErrNotFound):
+		blocks = append(blocks, ansi.Truncate(fmt.Sprintf("no user or organization named %q", m.login), width, "..."))
 	case m.err != nil:
-		blocks = append(blocks, "no results")
+		blocks = append(blocks, lipgloss.NewStyle().
+			Width(min(width, maxErrorWidth)).
+			Render(fmt.Sprintf("couldn't load %q: %v", m.login, m.err)))
 	case u.Login != "":
 		blocks = append(blocks, m.header(width)...)
-		blocks = append(blocks,
-			"",
-			fmt.Sprintf("%v contributions", u.ActivityGraph.ContributionsCount),
-			graph.BuildGraphDisplay(fitWeeks(u.ActivityGraph.Weeks, width)),
-			"",
-		)
+		blocks = append(blocks, "")
+		if !u.IsOrganization {
+			blocks = append(blocks,
+				fmt.Sprintf("%v contributions", u.ActivityGraph.ContributionsCount),
+				graph.BuildGraphDisplay(fitWeeks(u.ActivityGraph.Weeks, width)),
+				"",
+			)
+		}
 	}
 
 	var lines []string
@@ -132,15 +145,17 @@ func (m Model) header(width int) []string {
 		blocks = append(blocks, bio, "")
 	}
 
-	follow := fmt.Sprintf("%v followers", u.FollowersCount)
-	if u.ViewerIsFollowing {
-		follow += lipgloss.NewStyle().Italic(true).Render(" (you follow)")
+	if !u.IsOrganization {
+		follow := fmt.Sprintf("%v followers", u.FollowersCount)
+		if u.ViewerIsFollowing {
+			follow += lipgloss.NewStyle().Italic(true).Render(" (you follow)")
+		}
+		follow += fmt.Sprintf(" / %v following", u.FollowingCount)
+		if u.IsFollowingViewer {
+			follow += lipgloss.NewStyle().Italic(true).Render(" (follows you)")
+		}
+		blocks = append(blocks, ansi.Truncate(follow, width, "..."))
 	}
-	follow += fmt.Sprintf(" / %v following", u.FollowingCount)
-	if u.IsFollowingViewer {
-		follow += lipgloss.NewStyle().Italic(true).Render(" (follows you)")
-	}
-	blocks = append(blocks, ansi.Truncate(follow, width, "..."))
 
 	var links []string
 	if u.Location != "" {
@@ -153,7 +168,13 @@ func (m Model) header(width int) []string {
 		links = append(links, "@"+u.TwitterUsername)
 	}
 	if len(links) > 0 {
-		blocks = append(blocks, "", ansi.Truncate(strings.Join(links, "  /  "), width, "..."))
+		if !u.IsOrganization {
+			blocks = append(blocks, "")
+		}
+		blocks = append(blocks, ansi.Truncate(strings.Join(links, "  /  "), width, "..."))
+	}
+	if blocks[len(blocks)-1] == "" {
+		blocks = blocks[:len(blocks)-1]
 	}
 	return blocks
 }

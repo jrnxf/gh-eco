@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -29,7 +30,7 @@ type Client struct {
 	rest *api.RESTClient
 
 	mu sync.Mutex
-	// readmes caches decoded readmes by owner/name for the session.
+	// readmes caches decoded readmes by request path for the session.
 	readmes map[string]string
 }
 
@@ -55,23 +56,42 @@ func NewClientWithOptions(opts api.ClientOptions) (*Client, error) {
 	return &Client{gql: gql, rest: rest, readmes: map[string]string{}}, nil
 }
 
-// User fetches a profile, its pinned repositories and its contribution graph.
+// ErrNotFound means no user or organization has the login.
+var ErrNotFound = errors.New("not found")
+
+// User fetches a user or organization profile with its pinned repositories,
+// and a user's contribution graph.
 func (c *Client) User(ctx context.Context, login string) (models.User, error) {
-	var query queries.GetUserQuery
+	var query queries.GetOwnerQuery
 	variables := map[string]interface{}{
 		"login": queries.String(login),
 		"first": queries.Int(6),
 	}
-	if err := c.gql.QueryWithContext(ctx, "GetUser", &query, variables); err != nil {
+	if err := c.gql.QueryWithContext(ctx, "GetOwner", &query, variables); err != nil {
 		return models.User{}, err
 	}
-	return mapUser(query), nil
+	u, ok := mapOwner(query)
+	if !ok {
+		return models.User{}, ErrNotFound
+	}
+	return u, nil
 }
 
-// Readme fetches the decoded readme of owner/name. Readmes are cached for
-// the session, so toggling back to one is instant.
+// Readme fetches the decoded readme of owner/name.
 func (c *Client) Readme(ctx context.Context, owner, name string) (string, error) {
-	key := strings.ToLower(owner + "/" + name)
+	return c.cachedContent(ctx, fmt.Sprintf("repos/%s/%s/readme", url.PathEscape(owner), url.PathEscape(name)))
+}
+
+// OrgReadme fetches an organization's profile readme, which lives in its
+// .github repository.
+func (c *Client) OrgReadme(ctx context.Context, org string) (string, error) {
+	return c.cachedContent(ctx, fmt.Sprintf("repos/%s/.github/contents/profile/README.md", url.PathEscape(org)))
+}
+
+// cachedContent fetches and decodes a REST file response. Results are
+// cached for the session, so toggling back to a readme is instant.
+func (c *Client) cachedContent(ctx context.Context, path string) (string, error) {
+	key := strings.ToLower(path)
 	c.mu.Lock()
 	text, ok := c.readmes[key]
 	c.mu.Unlock()
@@ -83,7 +103,6 @@ func (c *Client) Readme(ctx context.Context, owner, name string) (string, error)
 		Content  string `json:"content"`
 		Encoding string `json:"encoding"`
 	}
-	path := fmt.Sprintf("repos/%s/%s/readme", url.PathEscape(owner), url.PathEscape(name))
 	if err := c.rest.DoWithContext(ctx, "GET", path, nil, &response); err != nil {
 		return "", err
 	}

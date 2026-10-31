@@ -7,11 +7,11 @@ import (
 )
 
 func Test_MapUserSkipsNonRepositoryPins(t *testing.T) {
-	var q queries.GetUserQuery
-	q.User.Login = "octocat"
-	q.User.PinnedItems.Nodes = make([]queries.PinnedItem, 2)
-	q.User.PinnedItems.Nodes[0].Repository.Id = "R_1"
-	q.User.PinnedItems.Nodes[0].Repository.Name = "hello-world"
+	var q queries.User
+	q.Login = "octocat"
+	q.PinnedItems.Nodes = make([]queries.PinnedItem, 2)
+	q.PinnedItems.Nodes[0].Repository.Id = "R_1"
+	q.PinnedItems.Nodes[0].Repository.Name = "hello-world"
 	// Nodes[1] is a pinned gist, which decodes as an empty Repository
 
 	u := mapUser(q)

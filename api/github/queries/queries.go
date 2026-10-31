@@ -1,38 +1,57 @@
 package queries
 
-type GetUserQuery struct {
-	User struct {
-		Id                string
-		Login             string
-		Name              string
-		Location          string
-		Url               string
-		Bio               string
-		TwitterUsername   string
-		IsViewer          bool
-		IsFollowingViewer bool
-		ViewerIsFollowing bool
-		WebsiteUrl        string
-		Followers         struct {
-			TotalCount int
-		}
-		Following struct {
-			TotalCount int
-		}
-		PinnedItems struct {
-			Nodes []PinnedItem
-		} `graphql:"pinnedItems(first: $first, types: [REPOSITORY])"`
-		ContributionsCollection struct {
-			ContributionCalendar struct {
-				TotalContributions int
-				Weeks              []struct {
-					ContributionDays []struct {
-						ContributionLevel string
-					}
+// GetOwnerQuery looks up a user or an organization by login.
+type GetOwnerQuery struct {
+	RepositoryOwner struct {
+		Typename     string       `graphql:"__typename"`
+		User         User         `graphql:"... on User"`
+		Organization Organization `graphql:"... on Organization"`
+	} `graphql:"repositoryOwner(login: $login)"`
+}
+
+type User struct {
+	Login             string
+	Name              string
+	Location          string
+	Url               string
+	Bio               string
+	TwitterUsername   string
+	IsViewer          bool
+	IsFollowingViewer bool
+	ViewerIsFollowing bool
+	WebsiteUrl        string
+	Followers         struct {
+		TotalCount int
+	}
+	Following struct {
+		TotalCount int
+	}
+	PinnedItems             PinnedItems `graphql:"pinnedItems(first: $first, types: [REPOSITORY])"`
+	ContributionsCollection struct {
+		ContributionCalendar struct {
+			TotalContributions int
+			Weeks              []struct {
+				ContributionDays []struct {
+					ContributionLevel string
 				}
 			}
 		}
-	} `graphql:"user(login: $login)"`
+	}
+}
+
+type Organization struct {
+	Login           string
+	Name            string
+	Location        string
+	Url             string
+	Description     string
+	TwitterUsername string
+	WebsiteUrl      string
+	PinnedItems     PinnedItems `graphql:"pinnedItems(first: $first, types: [REPOSITORY])"`
+}
+
+type PinnedItems struct {
+	Nodes []PinnedItem
 }
 
 // PinnedItem is one pinned item; only repositories are queried.
