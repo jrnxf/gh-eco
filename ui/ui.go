@@ -30,6 +30,8 @@ type Client interface {
 	User(ctx context.Context, login string) (models.User, error)
 	Readme(ctx context.Context, owner, name string) (string, error)
 	OrgReadme(ctx context.Context, org string) (string, error)
+	CachedReadme(owner, name string) (string, bool)
+	CachedOrgReadme(org string) (string, bool)
 	Star(ctx context.Context, id string) (models.Starrable, error)
 	Unstar(ctx context.Context, id string) (models.Starrable, error)
 }
@@ -46,8 +48,10 @@ type Model struct {
 	loading  loading.Model
 	// userReq identifies the latest user lookup.
 	userReq int
-	// readmeReq identifies the latest readme request.
-	readmeReq int
+	// readmeReq identifies the latest readme request; readmePending is set
+	// while it is unanswered.
+	readmeReq     int
+	readmePending bool
 	// starReq identifies the latest star toggle per repo id.
 	starReq map[string]int
 }
@@ -69,7 +73,7 @@ func New(client Client) Model {
 		markdown: markdown.NewModel(s),
 		help:     help.NewModel(s),
 		message:  message.NewModel(s),
-		loading:  loading.New(loading.Delay),
+		loading:  loading.New(),
 		starReq:  map[string]int{},
 	}
 }
@@ -88,12 +92,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 		if s.Mode == state.NormalMode {
+			if m.readmePending {
+				// any key means the user moved on: drop the pending
+				// readme, success or failure
+				m.readmeReq++
+				m.readmePending = false
+				m.loading.Stop(loadingReadme)
+			}
 			cmds = append(cmds, m.handleNormalKey(msg))
 		}
 
 	case commands.SearchSubmitted:
 		m.userReq++
 		m.readmeReq++
+		m.readmePending = false
+		m.loading.Stop(loadingReadme)
 		cmds = append(cmds, fetchUser(m.client, msg.Login, m.userReq), m.loading.Start(searching))
 
 	case commands.GetUserResponse:
@@ -111,6 +124,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// a newer readme request superseded this one
 			return m, nil
 		}
+		m.readmePending = false
 		m.loading.Stop(loadingReadme)
 		if s.Mode != state.NormalMode || s.CurrentView != state.UserView {
 			// the user moved on before the readme arrived
@@ -203,12 +217,10 @@ func (m *Model) handleNormalKey(msg tea.KeyMsg) tea.Cmd {
 		case state.UserView:
 			switch target.Kind {
 			case state.UserTarget:
-				m.readmeReq++
-				return tea.Batch(fetchProfileReadme(m.client, s.User, m.readmeReq), m.loading.Start(loadingReadme))
+				return m.openReadme(profileReadme(s.User))
 			case state.RepoTarget:
 				r := s.FocusedRepo()
-				m.readmeReq++
-				return tea.Batch(fetchReadme(m.client, r.Owner.Login, r.Name, m.readmeReq), m.loading.Start(loadingReadme))
+				return m.openReadme(readmeRef{owner: r.Owner.Login, name: r.Name})
 			}
 		case state.ReadmeView:
 			s.CurrentView = state.UserView
@@ -264,23 +276,51 @@ func fetchUser(c Client, login string, req int) tea.Cmd {
 	}
 }
 
-func fetchReadme(c Client, owner, name string, req int) tea.Cmd {
-	return func() tea.Msg {
-		text, err := c.Readme(context.Background(), owner, name)
-		return commands.GetReadmeResponse{Req: req, Readme: text, Err: err}
-	}
+// readmeRef names a readme: a repo's, or an organization's profile readme.
+type readmeRef struct {
+	owner, name string
+	org         bool
 }
 
-// fetchProfileReadme fetches the readme shown on a profile: a user's lives
-// in the repo named after them, an organization's in its .github repo.
-func fetchProfileReadme(c Client, u models.User, req int) tea.Cmd {
-	if !u.IsOrganization {
-		return fetchReadme(c, u.Login, u.Login, req)
+// profileReadme is the readme shown on a profile: a user's lives in the
+// repo named after them, an organization's in its .github repo.
+func profileReadme(u models.User) readmeRef {
+	if u.IsOrganization {
+		return readmeRef{owner: u.Login, org: true}
 	}
-	return func() tea.Msg {
-		text, err := c.OrgReadme(context.Background(), u.Login)
+	return readmeRef{owner: u.Login, name: u.Login}
+}
+
+// openReadme requests a readme. A cached one answers at once; only a
+// request that goes to the network shows the spinner.
+func (m *Model) openReadme(ref readmeRef) tea.Cmd {
+	m.readmeReq++
+	m.readmePending = true
+	req := m.readmeReq
+
+	var text string
+	var ok bool
+	if ref.org {
+		text, ok = m.client.CachedOrgReadme(ref.owner)
+	} else {
+		text, ok = m.client.CachedReadme(ref.owner, ref.name)
+	}
+	if ok {
+		return func() tea.Msg { return commands.GetReadmeResponse{Req: req, Readme: text} }
+	}
+
+	c := m.client
+	fetch := func() tea.Msg {
+		var text string
+		var err error
+		if ref.org {
+			text, err = c.OrgReadme(context.Background(), ref.owner)
+		} else {
+			text, err = c.Readme(context.Background(), ref.owner, ref.name)
+		}
 		return commands.GetReadmeResponse{Req: req, Readme: text, Err: err}
 	}
+	return tea.Batch(fetch, m.loading.Start(loadingReadme))
 }
 
 // star stars id, or removes the star when starred is true.

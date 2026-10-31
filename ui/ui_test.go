@@ -17,12 +17,16 @@ import (
 	"github.com/jrnxf/gh-eco/ui/state"
 )
 
-// fakeClient serves canned users and records every call.
+// fakeClient serves canned users and readmes, caches readmes like the
+// real client and records every call.
 type fakeClient struct {
 	mu      sync.Mutex
 	calls   []string
 	users   map[string]models.User
 	readmes map[string]string
+	cache   map[string]string
+	// starErr fails every star and unstar.
+	starErr error
 }
 
 func (f *fakeClient) record(call string) {
@@ -47,10 +51,17 @@ func (f *fakeClient) User(_ context.Context, login string) (models.User, error) 
 
 func (f *fakeClient) Readme(_ context.Context, owner, name string) (string, error) {
 	f.record("readme " + owner + "/" + name)
-	if r, ok := f.readmes[owner+"/"+name]; ok {
-		return r, nil
+	r, ok := f.readmes[owner+"/"+name]
+	if !ok {
+		return "", github.ErrNotFound
 	}
-	return "", github.ErrNotFound
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.cache == nil {
+		f.cache = map[string]string{}
+	}
+	f.cache[owner+"/"+name] = r
+	return r, nil
 }
 
 func (f *fakeClient) OrgReadme(_ context.Context, org string) (string, error) {
@@ -58,13 +69,30 @@ func (f *fakeClient) OrgReadme(_ context.Context, org string) (string, error) {
 	return "# " + org, nil
 }
 
+func (f *fakeClient) CachedReadme(owner, name string) (string, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	r, ok := f.cache[owner+"/"+name]
+	return r, ok
+}
+
+func (f *fakeClient) CachedOrgReadme(string) (string, bool) {
+	return "", false
+}
+
 func (f *fakeClient) Star(_ context.Context, id string) (models.Starrable, error) {
 	f.record("star " + id)
+	if f.starErr != nil {
+		return models.Starrable{}, f.starErr
+	}
 	return models.Starrable{Id: id, ViewerHasStarred: true, StargazerCount: 1}, nil
 }
 
 func (f *fakeClient) Unstar(_ context.Context, id string) (models.Starrable, error) {
 	f.record("unstar " + id)
+	if f.starErr != nil {
+		return models.Starrable{}, f.starErr
+	}
 	return models.Starrable{Id: id}, nil
 }
 
@@ -470,6 +498,134 @@ func Test_ThanksOnlyAfterStarringGhEco(t *testing.T) {
 func bottomRow(m Model) string {
 	lines := strings.Split(m.View(), "\n")
 	return lines[len(lines)-1]
+}
+
+func Test_SpinnerOnlyWhileTheNetworkIsBusy(t *testing.T) {
+	client := &fakeClient{
+		users:   map[string]models.User{"octocat": octocat()},
+		readmes: map[string]string{"octocat/alpha": "# alpha readme"},
+	}
+	m := newModel(t, client)
+	m, res := lookup(t, m, "octocat")
+	if !strings.Contains(bottomRow(m), "searching") {
+		t.Errorf("no spinner while searching: %q", bottomRow(m))
+	}
+	m, _ = send(m, res)
+	if strings.Contains(bottomRow(m), "searching") {
+		t.Errorf("spinner outlived the search: %q", bottomRow(m))
+	}
+
+	m, _ = send(m, keyRunes("j"))
+	m, _ = send(m, keyRunes("j")) // alpha
+	m, msgs := send(m, keyRunes("r"))
+	if !strings.Contains(bottomRow(m), "loading readme") {
+		t.Errorf("no spinner while the readme loads: %q", bottomRow(m))
+	}
+	m, _ = send(m, find[commands.GetReadmeResponse](t, msgs))
+	if strings.Contains(bottomRow(m), "loading") {
+		t.Errorf("spinner outlived the readme: %q", bottomRow(m))
+	}
+
+	// back and open it again: the cache answers, so no spinner at all
+	m, _ = send(m, keyRunes("r"))
+	m, msgs = send(m, keyRunes("r"))
+	if strings.Contains(bottomRow(m), "loading") {
+		t.Errorf("spinner shown for a cached readme: %q", bottomRow(m))
+	}
+	m, _ = send(m, find[commands.GetReadmeResponse](t, msgs))
+	if m.state.CurrentView != state.ReadmeView {
+		t.Errorf("cached readme did not open")
+	}
+	if n := strings.Count(strings.Join(client.calls, "\n"), "readme octocat/alpha"); n != 1 {
+		t.Errorf("fetched the readme %d times, want once", n)
+	}
+}
+
+func Test_FailedReadmeIsQuietOnceTheUserMovesOn(t *testing.T) {
+	client := &fakeClient{users: map[string]models.User{"octocat": octocat()}}
+	m := newModel(t, client)
+	m, res := lookup(t, m, "octocat")
+	m, _ = send(m, res)
+	m, _ = send(m, keyRunes("j"))
+	m, _ = send(m, keyRunes("j")) // alpha, which has no readme
+
+	m, msgs := send(m, keyRunes("r"))
+	failed := find[commands.GetReadmeResponse](t, msgs)
+	if failed.Err == nil {
+		t.Fatal("expected the readme request to fail")
+	}
+
+	// the user moves on before the failure lands
+	m, _ = send(m, keyRunes("j"))
+	if strings.Contains(bottomRow(m), "loading") {
+		t.Errorf("spinner kept going after the user moved on: %q", bottomRow(m))
+	}
+	m, msgs = send(m, failed)
+	if _, ok := firstOf[commands.SetMessage](msgs.all(t)); ok {
+		t.Errorf("notice shown for a readme the user moved away from")
+	}
+
+	// without a keypress in between, the failure is reported
+	m, msgs = send(m, keyRunes("r"))
+	m, msgs = send(m, find[commands.GetReadmeResponse](t, msgs))
+	m, _ = send(m, find[commands.SetMessage](t, msgs))
+	if !strings.Contains(bottomRow(m), "couldn't load readme") {
+		t.Fatalf("no notice for a failed readme: %q", bottomRow(m))
+	}
+
+	// and the next keypress clears it
+	m, _ = send(m, keyRunes("k"))
+	if strings.Contains(bottomRow(m), "couldn't load readme") {
+		t.Errorf("notice survived a keypress: %q", bottomRow(m))
+	}
+}
+
+func Test_StarIsInstantAndRevertsOnFailure(t *testing.T) {
+	client := &fakeClient{
+		users:   map[string]models.User{"octocat": octocat()},
+		starErr: errors.New("You do not have permission to star this repository"),
+	}
+	m := newModel(t, client)
+	m, res := lookup(t, m, "octocat")
+	m, _ = send(m, res)
+	m, _ = send(m, keyRunes("j"))
+	m, _ = send(m, keyRunes("j")) // alpha
+	stars := m.state.FocusedRepo().StarsCount
+
+	m, msgs := send(m, keyRunes("s"))
+	if r := m.state.FocusedRepo(); !r.ViewerHasStarred || r.StarsCount != stars+1 {
+		t.Fatalf("star not shown at once: %+v", r)
+	}
+
+	m, msgs = send(m, find[commands.StarResponse](t, msgs))
+	if r := m.state.FocusedRepo(); r.ViewerHasStarred || r.StarsCount != stars {
+		t.Errorf("failed star not reverted: %+v", r)
+	}
+	m, _ = send(m, find[commands.SetMessage](t, msgs))
+	if !strings.Contains(bottomRow(m), "star failed: You do not have permission") {
+		t.Errorf("notice does not say why: %q", bottomRow(m))
+	}
+}
+
+func Test_OnlyTheLatestStarToggleCounts(t *testing.T) {
+	client := &fakeClient{users: map[string]models.User{"octocat": octocat()}}
+	m := newModel(t, client)
+	m, res := lookup(t, m, "octocat")
+	m, _ = send(m, res)
+	m, _ = send(m, keyRunes("j"))
+	m, _ = send(m, keyRunes("j")) // alpha
+
+	m, first := send(m, keyRunes("s"))  // star
+	m, second := send(m, keyRunes("s")) // and straight back
+	starred := find[commands.StarResponse](t, first)
+	unstarred := find[commands.StarResponse](t, second)
+
+	// the star lands after the unstar: it must not re-star alpha
+	m, _ = send(m, unstarred)
+	m, _ = send(m, starred)
+	if r := m.state.FocusedRepo(); r.ViewerHasStarred {
+		t.Errorf("an older toggle overrode the latest: %+v", r)
+	}
 }
 
 func Test_ReadmeHelpOffersStarOnlyForRepos(t *testing.T) {

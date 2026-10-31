@@ -39,6 +39,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.timer = timer.NewWithInterval(time.Second*time.Duration(msg.SecondsDisplayed), time.Second)
 		return m, m.timer.Init()
 
+	case tea.KeyMsg:
+		// a keypress means the notice has been seen
+		m.Content = ""
+
 	case timer.TickMsg, timer.StartStopMsg:
 		var cmd tea.Cmd
 		m.timer, cmd = m.timer.Update(msg)

@@ -79,23 +79,45 @@ func (c *Client) User(ctx context.Context, login string) (models.User, error) {
 
 // Readme fetches the decoded readme of owner/name.
 func (c *Client) Readme(ctx context.Context, owner, name string) (string, error) {
-	return c.cachedContent(ctx, fmt.Sprintf("repos/%s/%s/readme", url.PathEscape(owner), url.PathEscape(name)))
+	return c.cachedContent(ctx, readmePath(owner, name))
 }
 
 // OrgReadme fetches an organization's profile readme, which lives in its
 // .github repository.
 func (c *Client) OrgReadme(ctx context.Context, org string) (string, error) {
-	return c.cachedContent(ctx, fmt.Sprintf("repos/%s/.github/contents/profile/README.md", url.PathEscape(org)))
+	return c.cachedContent(ctx, orgReadmePath(org))
+}
+
+// CachedReadme returns the readme of owner/name if it is already cached.
+func (c *Client) CachedReadme(owner, name string) (string, bool) {
+	return c.cached(readmePath(owner, name))
+}
+
+// CachedOrgReadme returns an organization's profile readme if it is
+// already cached.
+func (c *Client) CachedOrgReadme(org string) (string, bool) {
+	return c.cached(orgReadmePath(org))
+}
+
+func readmePath(owner, name string) string {
+	return fmt.Sprintf("repos/%s/%s/readme", url.PathEscape(owner), url.PathEscape(name))
+}
+
+func orgReadmePath(org string) string {
+	return fmt.Sprintf("repos/%s/.github/contents/profile/README.md", url.PathEscape(org))
+}
+
+func (c *Client) cached(path string) (string, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	text, ok := c.readmes[strings.ToLower(path)]
+	return text, ok
 }
 
 // cachedContent fetches and decodes a REST file response. Results are
 // cached for the session, so toggling back to a readme is instant.
 func (c *Client) cachedContent(ctx context.Context, path string) (string, error) {
-	key := strings.ToLower(path)
-	c.mu.Lock()
-	text, ok := c.readmes[key]
-	c.mu.Unlock()
-	if ok {
+	if text, ok := c.cached(path); ok {
 		return text, nil
 	}
 
@@ -112,7 +134,7 @@ func (c *Client) cachedContent(ctx context.Context, path string) (string, error)
 	}
 
 	c.mu.Lock()
-	c.readmes[key] = text
+	c.readmes[strings.ToLower(path)] = text
 	c.mu.Unlock()
 	return text, nil
 }

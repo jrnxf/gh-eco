@@ -228,11 +228,17 @@ func Test_ReadmeIsFetchedOncePerRepo(t *testing.T) {
 	}}
 	c := newFake(t, fake)
 
+	if _, ok := c.CachedReadme("octocat", "hello-world"); ok {
+		t.Errorf("readme cached before it was fetched")
+	}
 	for range 3 {
 		text, err := c.Readme(context.Background(), "octocat", "hello-world")
 		if err != nil || text != "# hello" {
 			t.Fatalf("readme = %q, %v", text, err)
 		}
+	}
+	if text, ok := c.CachedReadme("OctoCat", "Hello-World"); !ok || text != "# hello" {
+		t.Errorf("cached readme = %q, %v; lookups ignore case like GitHub", text, ok)
 	}
 	if _, err := c.Readme(context.Background(), "octocat", "missing"); err == nil {
 		t.Errorf("missing readme returned no error")
@@ -243,6 +249,12 @@ func Test_ReadmeIsFetchedOncePerRepo(t *testing.T) {
 
 	if _, err := c.OrgReadme(context.Background(), "acme"); err != nil {
 		t.Errorf("org readme: %v", err)
+	}
+	if _, ok := c.CachedOrgReadme("acme"); !ok {
+		t.Errorf("org readme not cached")
+	}
+	if _, ok := c.CachedReadme("octocat", "missing"); ok {
+		t.Errorf("a failed fetch was cached")
 	}
 	if fake.requests[len(fake.requests)-1].path != "/repos/acme/.github/contents/profile/README.md" {
 		t.Errorf("org readme fetched from %s", fake.requests[len(fake.requests)-1].path)
