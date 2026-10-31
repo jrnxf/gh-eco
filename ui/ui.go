@@ -15,6 +15,7 @@ import (
 	"github.com/jrnxf/gh-eco/models"
 	"github.com/jrnxf/gh-eco/ui/commands"
 	"github.com/jrnxf/gh-eco/ui/components/help"
+	"github.com/jrnxf/gh-eco/ui/components/loading"
 	"github.com/jrnxf/gh-eco/ui/components/markdown"
 	"github.com/jrnxf/gh-eco/ui/components/message"
 	"github.com/jrnxf/gh-eco/ui/components/search"
@@ -41,11 +42,20 @@ type Model struct {
 	markdown markdown.Model
 	help     help.Model
 	message  message.Model
+	loading  loading.Model
 	// userReq identifies the latest user lookup.
 	userReq int
 	// readmeReq identifies the latest readme request.
 	readmeReq int
+	// starReq identifies the latest star toggle per repo id.
+	starReq map[string]int
 }
+
+// Labels for the loading spinner.
+const (
+	searching     = "searching…"
+	loadingReadme = "loading readme…"
+)
 
 func New(client Client) Model {
 	s := &state.State{Mode: state.InsertMode, CurrentView: state.UserView}
@@ -58,6 +68,8 @@ func New(client Client) Model {
 		markdown: markdown.NewModel(s),
 		help:     help.NewModel(s),
 		message:  message.NewModel(s),
+		loading:  loading.New(loading.Delay),
+		starReq:  map[string]int{},
 	}
 }
 
@@ -81,19 +93,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case commands.SearchSubmitted:
 		m.userReq++
 		m.readmeReq++
-		cmds = append(cmds, fetchUser(m.client, msg.Login, m.userReq))
+		cmds = append(cmds, fetchUser(m.client, msg.Login, m.userReq), m.loading.Start(searching))
 
 	case commands.GetUserResponse:
 		if msg.Req != m.userReq {
 			// a newer search superseded this one
 			return m, nil
 		}
+		m.loading.Stop(searching)
 		// a failed search clears the previous user, so nothing acts on it
 		s.User = msg.User
 		s.Focus = 0
 
 	case commands.GetReadmeResponse:
-		if msg.Req != m.readmeReq || s.Mode != state.NormalMode || s.CurrentView != state.UserView {
+		if msg.Req != m.readmeReq {
+			// a newer readme request superseded this one
+			return m, nil
+		}
+		m.loading.Stop(loadingReadme)
+		if s.Mode != state.NormalMode || s.CurrentView != state.UserView {
 			// the user moved on before the readme arrived
 			return m, nil
 		}
@@ -104,23 +122,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case commands.StarResponse:
-		if msg.Err != nil {
-			text := "star failed 😕"
-			if msg.Unstar {
-				text = "unstar failed 😕"
-			}
-			cmds = append(cmds, message.Show(text, 2))
+		if msg.Req != m.starReq[msg.Id] {
+			// a newer toggle of the same repo owns its state now
 			break
 		}
-		if msg.Starrable.Id == github.GhEcoRepoID && !msg.Unstar {
+		r := s.PinnedRepo(msg.Id)
+		if msg.Err != nil {
+			if r != nil {
+				// undo the optimistic toggle
+				setStarred(r, msg.Unstar)
+			}
+			text := "star failed: "
+			if msg.Unstar {
+				text = "unstar failed: "
+			}
+			cmds = append(cmds, message.Show(text+msg.Err.Error(), 3))
+			break
+		}
+		if msg.Id == github.GhEcoRepoID && !msg.Unstar {
 			cmds = append(cmds, message.Show("tysm 🥹", 2))
 		}
-		for i := range s.User.PinnedRepos {
-			r := &s.User.PinnedRepos[i]
-			if r.Id == msg.Starrable.Id {
-				r.ViewerHasStarred = msg.Starrable.ViewerHasStarred
-				r.StarsCount = msg.Starrable.StargazerCount
-			}
+		if r != nil {
+			r.ViewerHasStarred = msg.Starrable.ViewerHasStarred
+			r.StarsCount = msg.Starrable.StargazerCount
 		}
 
 	case tea.WindowSizeMsg:
@@ -129,6 +153,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	var cmd tea.Cmd
+	m.loading, cmd = m.loading.Update(msg)
+	cmds = append(cmds, cmd)
 	m.help, cmd = m.help.Update(msg)
 	cmds = append(cmds, cmd)
 	m.search, cmd = m.search.Update(msg)
@@ -160,11 +186,16 @@ func (m *Model) handleNormalKey(msg tea.KeyMsg) tea.Cmd {
 
 	case key.Matches(msg, m.keys.StarRepo):
 		if r := s.FocusedRepo(); r != nil {
-			return star(m.client, r.Id, r.ViewerHasStarred)
+			// show the new state at once; a failure flips it back
+			unstar := r.ViewerHasStarred
+			setStarred(r, !unstar)
+			m.starReq[r.Id]++
+			return star(m.client, r.Id, unstar, m.starReq[r.Id])
 		}
 
 	case key.Matches(msg, m.keys.StarGhEco):
-		return star(m.client, github.GhEcoRepoID, false)
+		m.starReq[github.GhEcoRepoID]++
+		return star(m.client, github.GhEcoRepoID, false, m.starReq[github.GhEcoRepoID])
 
 	case key.Matches(msg, m.keys.ToggleReadme):
 		switch s.CurrentView {
@@ -172,11 +203,11 @@ func (m *Model) handleNormalKey(msg tea.KeyMsg) tea.Cmd {
 			switch target.Kind {
 			case state.UserTarget:
 				m.readmeReq++
-				return fetchProfileReadme(m.client, s.User, m.readmeReq)
+				return tea.Batch(fetchProfileReadme(m.client, s.User, m.readmeReq), m.loading.Start(loadingReadme))
 			case state.RepoTarget:
 				r := s.FocusedRepo()
 				m.readmeReq++
-				return fetchReadme(m.client, r.Owner.Login, r.Name, m.readmeReq)
+				return tea.Batch(fetchReadme(m.client, r.Owner.Login, r.Name, m.readmeReq), m.loading.Start(loadingReadme))
 			}
 		case state.ReadmeView:
 			s.CurrentView = state.UserView
@@ -208,10 +239,13 @@ func (m *Model) layout() {
 }
 
 func (m Model) View() string {
-	// a notice takes the help bar's row for a moment
+	// a notice, then a slow request's spinner, takes the help bar's row
 	bottom := m.help.View()
-	if m.message.Content != "" {
+	switch {
+	case m.message.Content != "":
 		bottom = m.message.View()
+	case m.loading.Visible():
+		bottom = m.loading.View()
 	}
 
 	if m.state.CurrentView == state.ReadmeView {
@@ -247,14 +281,27 @@ func fetchProfileReadme(c Client, u models.User, req int) tea.Cmd {
 }
 
 // star stars id, or removes the star when starred is true.
-func star(c Client, id string, starred bool) tea.Cmd {
+func star(c Client, id string, starred bool, req int) tea.Cmd {
 	return func() tea.Msg {
 		do := c.Star
 		if starred {
 			do = c.Unstar
 		}
 		s, err := do(context.Background(), id)
-		return commands.StarResponse{Unstar: starred, Starrable: s, Err: err}
+		return commands.StarResponse{Req: req, Id: id, Unstar: starred, Starrable: s, Err: err}
+	}
+}
+
+// setStarred sets the viewer's star on r and adjusts its count to match.
+func setStarred(r *models.Repo, starred bool) {
+	if r.ViewerHasStarred == starred {
+		return
+	}
+	r.ViewerHasStarred = starred
+	if starred {
+		r.StarsCount++
+	} else {
+		r.StarsCount = max(0, r.StarsCount-1)
 	}
 }
 

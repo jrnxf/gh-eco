@@ -80,6 +80,16 @@ func (s *State) FocusedRepo() *models.Repo {
 	return nil
 }
 
+// PinnedRepo returns the pinned repo with the given id, or nil.
+func (s *State) PinnedRepo(id string) *models.Repo {
+	for i := range s.User.PinnedRepos {
+		if s.User.PinnedRepos[i].Id == id {
+			return &s.User.PinnedRepos[i]
+		}
+	}
+	return nil
+}
+
 func (s *State) FocusNext() {
 	n := len(s.Targets())
 	s.Focus = (s.Focus + 1) % n

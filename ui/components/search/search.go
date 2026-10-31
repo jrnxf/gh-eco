@@ -5,10 +5,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/jrnxf/gh-eco/ui/commands"
 	"github.com/jrnxf/gh-eco/ui/keys"
 	"github.com/jrnxf/gh-eco/ui/state"
@@ -17,8 +15,6 @@ import (
 type Model struct {
 	keys      keys.KeyMap
 	textInput textinput.Model
-	spinner   spinner.Model
-	fetching  bool
 	state     *state.State
 }
 
@@ -30,11 +26,7 @@ func NewModel(s *state.State) Model {
 	return Model{
 		keys:      keys.Keys,
 		textInput: ti,
-		spinner: spinner.New(
-			spinner.WithSpinner(spinner.Dot),
-			spinner.WithStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("#5E81AC"))),
-		),
-		state: s,
+		state:     s,
 	}
 }
 
@@ -47,10 +39,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		case state.InsertMode:
 			if login := strings.TrimSpace(m.textInput.Value()); key.Matches(msg, m.keys.Search) && login != "" {
 				m.state.Mode = state.NormalMode
-				m.fetching = true
 				cmds = append(cmds,
 					m.textInput.Cursor.SetMode(cursor.CursorHide),
-					m.spinner.Tick,
 					func() tea.Msg { return commands.SearchSubmitted{Login: login} },
 				)
 			}
@@ -62,9 +52,6 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				return m, m.textInput.Cursor.SetMode(cursor.CursorBlink)
 			}
 		}
-
-	case commands.GetUserResponse:
-		m.fetching = false
 	}
 
 	var cmd tea.Cmd
@@ -72,19 +59,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.textInput, cmd = m.textInput.Update(msg)
 		cmds = append(cmds, cmd)
 	}
-	if m.fetching {
-		// only a fetching search keeps the spinner ticking, so it stops
-		// re-rendering once the result arrives
-		m.spinner, cmd = m.spinner.Update(msg)
-		cmds = append(cmds, cmd)
-	}
-
 	return m, tea.Batch(cmds...)
 }
 
 func (m Model) View() string {
-	if m.fetching {
-		return "\n" + m.textInput.View() + m.spinner.View()
-	}
 	return "\n" + m.textInput.View()
 }
