@@ -79,37 +79,85 @@ func octocat() models.User {
 	}
 }
 
-// drain runs cmd and every command it batches, and returns the messages
-// that arrive within a short window. The fake client answers at once;
-// cursor, spinner and timer ticks sleep far longer and are left behind.
-func drain(cmd tea.Cmd) []tea.Msg {
-	out := make(chan tea.Msg, 64)
-	var run func(tea.Cmd)
-	run = func(c tea.Cmd) {
-		if c == nil {
+// inbox collects the messages a command and every command it batches
+// produce. Each command runs in its own goroutine, so a slow one (a cursor
+// blink, a spinner or timer tick) never holds up the others.
+type inbox struct {
+	ch      chan tea.Msg
+	running sync.WaitGroup
+	got     []tea.Msg
+}
+
+func run(cmd tea.Cmd) *inbox {
+	in := &inbox{ch: make(chan tea.Msg, 256)}
+	in.launch(cmd)
+	return in
+}
+
+func (in *inbox) launch(cmd tea.Cmd) {
+	if cmd == nil {
+		return
+	}
+	in.running.Add(1)
+	go func() {
+		defer in.running.Done()
+		msg := cmd()
+		if batch, ok := msg.(tea.BatchMsg); ok {
+			for _, c := range batch {
+				in.launch(c)
+			}
 			return
 		}
-		go func() {
-			msg := c()
-			if batch, ok := msg.(tea.BatchMsg); ok {
-				for _, c := range batch {
-					run(c)
-				}
-				return
-			}
-			out <- msg
-		}()
-	}
-	run(cmd)
+		if msg != nil {
+			in.ch <- msg
+		}
+	}()
+}
 
-	var msgs []tea.Msg
-	deadline := time.After(50 * time.Millisecond)
+// waitLimit only bounds a broken test; a passing one never waits for it.
+const waitLimit = 5 * time.Second
+
+// find returns the first message of type T, waiting until one arrives.
+func find[T tea.Msg](t *testing.T, in *inbox) T {
+	t.Helper()
+	for _, msg := range in.got {
+		if m, ok := msg.(T); ok {
+			return m
+		}
+	}
+	timeout := time.After(waitLimit)
 	for {
 		select {
-		case msg := <-out:
-			msgs = append(msgs, msg)
-		case <-deadline:
-			return msgs
+		case msg := <-in.ch:
+			in.got = append(in.got, msg)
+			if m, ok := msg.(T); ok {
+				return m
+			}
+		case <-timeout:
+			var zero T
+			t.Fatalf("no %T after %v; got %d other messages", zero, waitLimit, len(in.got))
+			return zero
+		}
+	}
+}
+
+// all waits for every command to finish and returns all their messages.
+// Use it only where no command sleeps, such as a blink or a tick.
+func (in *inbox) all(t *testing.T) []tea.Msg {
+	t.Helper()
+	done := make(chan struct{})
+	go func() { in.running.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(waitLimit):
+		t.Fatalf("commands still running after %v", waitLimit)
+	}
+	for {
+		select {
+		case msg := <-in.ch:
+			in.got = append(in.got, msg)
+		default:
+			return in.got
 		}
 	}
 }
@@ -125,21 +173,11 @@ func firstOf[T tea.Msg](msgs []tea.Msg) (T, bool) {
 	return zero, false
 }
 
-// find returns the first message of type T.
-func find[T tea.Msg](t *testing.T, msgs []tea.Msg) T {
-	t.Helper()
-	m, ok := firstOf[T](msgs)
-	if !ok {
-		t.Fatalf("no %T among %d messages", m, len(msgs))
-	}
-	return m
-}
-
 // send feeds msg to m and returns the updated model and the messages its
-// commands produced.
-func send(m Model, msg tea.Msg) (Model, []tea.Msg) {
+// commands produce.
+func send(m Model, msg tea.Msg) (Model, *inbox) {
 	next, cmd := m.Update(msg)
-	return next.(Model), drain(cmd)
+	return next.(Model), run(cmd)
 }
 
 func keyRunes(s string) tea.KeyMsg {
@@ -189,7 +227,8 @@ func Test_StarResponseLandsAfterFocusMoved(t *testing.T) {
 		t.Errorf("alpha lost its star")
 	}
 
-	_, _ = send(m, keyRunes("s"))
+	_, msgs = send(m, keyRunes("s"))
+	find[commands.StarResponse](t, msgs)
 	if !client.called("star B") || client.called("unstar B") {
 		t.Errorf("s on beta must star it: calls %v", client.calls)
 	}
@@ -339,7 +378,7 @@ func Test_FailedSearchClearsPreviousUser(t *testing.T) {
 
 	// keys meant for the old user do nothing
 	_, msgs := send(m, keyRunes("r"))
-	if len(msgs) != 0 || client.called("readme octocat/octocat") {
+	if _, ok := firstOf[commands.GetReadmeResponse](msgs.all(t)); ok || client.called("readme octocat/octocat") {
 		t.Errorf("r after a failed search fetched %v", client.calls)
 	}
 }
@@ -413,7 +452,7 @@ func Test_ThanksOnlyAfterStarringGhEco(t *testing.T) {
 	m.state.Mode = state.NormalMode // ! works once the search box is left
 
 	m, msgs := send(m, keyRunes("!"))
-	if _, ok := firstOf[commands.SetMessage](msgs); ok {
+	if _, ok := firstOf[commands.SetMessage](msgs.all(t)); ok {
 		t.Errorf("thanked before the star request returned")
 	}
 	_, msgs = send(m, find[commands.StarResponse](t, msgs))
@@ -424,5 +463,36 @@ func Test_ThanksOnlyAfterStarringGhEco(t *testing.T) {
 	_, msgs = send(m, commands.StarResponse{Err: errors.New("boom")})
 	if msg := find[commands.SetMessage](t, msgs); strings.Contains(msg.Content, "tysm") {
 		t.Errorf("thanked for a star that failed")
+	}
+}
+
+// bottomRow is the frame's last row: the help bar, a notice or a spinner.
+func bottomRow(m Model) string {
+	lines := strings.Split(m.View(), "\n")
+	return lines[len(lines)-1]
+}
+
+func Test_ReadmeHelpOffersStarOnlyForRepos(t *testing.T) {
+	client := &fakeClient{
+		users:   map[string]models.User{"octocat": octocat()},
+		readmes: map[string]string{"octocat/octocat": "# me", "octocat/alpha": "# alpha"},
+	}
+	m := newModel(t, client)
+	m, res := lookup(t, m, "octocat")
+	m, _ = send(m, res)
+
+	m, _ = send(m, keyRunes("j")) // the profile
+	m, msgs := send(m, keyRunes("r"))
+	m, _ = send(m, find[commands.GetReadmeResponse](t, msgs))
+	if strings.Contains(bottomRow(m), "star repo") {
+		t.Errorf("profile readme offers to star a repo: %q", bottomRow(m))
+	}
+
+	m, _ = send(m, keyRunes("r"))
+	m, _ = send(m, keyRunes("j")) // alpha
+	m, msgs = send(m, keyRunes("r"))
+	m, _ = send(m, find[commands.GetReadmeResponse](t, msgs))
+	if !strings.Contains(bottomRow(m), "star repo") {
+		t.Errorf("repo readme does not offer to star it: %q", bottomRow(m))
 	}
 }

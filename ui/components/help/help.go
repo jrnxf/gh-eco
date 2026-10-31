@@ -4,6 +4,7 @@ import (
 	baseHelp "github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/jrnxf/gh-eco/ui/keys"
 	"github.com/jrnxf/gh-eco/ui/state"
@@ -33,7 +34,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
-	return m.help.ShortHelpView(m.collectHelpBindings())
+	// ShortHelpView can overflow its width when the ellipsis does not fit
+	return ansi.Truncate(m.help.ShortHelpView(m.collectHelpBindings()), m.help.Width, "…")
 }
 
 func (m Model) collectHelpBindings() []key.Binding {
@@ -54,7 +56,12 @@ func (m Model) collectHelpBindings() []key.Binding {
 					bindings = append(bindings, k.StarRepo)
 				}
 			} else if s.CurrentView == state.ReadmeView {
-				bindings = append(bindings, k.FocusNext, k.FocusPrev, k.PreviewPageDown, k.PreviewPageUp, k.ToggleReadme, k.StarRepo, k.OpenGithub)
+				bindings = append(bindings, k.FocusNext, k.FocusPrev, k.PreviewPageDown, k.PreviewPageUp, k.ToggleReadme)
+				if s.Focused().Kind == state.RepoTarget {
+					// a profile readme has no repo to star
+					bindings = append(bindings, k.StarRepo)
+				}
+				bindings = append(bindings, k.OpenGithub)
 			}
 			bindings = append(bindings, k.StarGhEco)
 		}

@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"io"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -245,13 +246,15 @@ func (m Model) View() string {
 	case m.message.Content != "":
 		bottom = m.message.View()
 	case m.loading.Visible():
-		bottom = m.loading.View()
+		bottom = m.loading.View(m.state.Layout.ScreenWidth)
 	}
 
+	// a plain join: lipgloss.JoinVertical pads every row to the widest
+	// block, which would undo the user view's right slack
 	if m.state.CurrentView == state.ReadmeView {
-		return lipgloss.JoinVertical(lipgloss.Left, m.markdown.View(), bottom)
+		return strings.Join([]string{m.markdown.View(), bottom}, "\n")
 	}
-	return lipgloss.JoinVertical(lipgloss.Left, m.search.View(), m.user.View(), bottom)
+	return strings.Join([]string{m.search.View(), m.user.View(), bottom}, "\n")
 }
 
 func fetchUser(c Client, login string, req int) tea.Cmd {

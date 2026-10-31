@@ -94,8 +94,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 func (m *Model) fitViewport() {
 	l := m.state.Layout
 	m.Viewport.Height = max(0, l.ContentHeight-lipgloss.Height(m.footerView()))
-	if m.Viewport.Width != l.ContentWidth {
-		m.Viewport.Width = l.ContentWidth
+	if width := max(0, l.ContentWidth-state.RightSlack); m.Viewport.Width != width {
+		m.Viewport.Width = width
 		m.Viewport.SetContent(m.renderReadme())
 	}
 }

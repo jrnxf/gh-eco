@@ -5,6 +5,11 @@ package state
 
 import "github.com/jrnxf/gh-eco/models"
 
+// RightSlack keeps every content line this many cells short of the screen
+// edge. Some emoji draw wider than lipgloss measures them; a line that
+// reached the last column would then wrap and shift the whole frame.
+const RightSlack = 2
+
 type Mode int
 
 const (

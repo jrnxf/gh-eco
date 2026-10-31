@@ -56,59 +56,81 @@ func busyUser() models.User {
 	return u
 }
 
-func checkFrame(t *testing.T, view string, width, height, slack int) {
+// checkFrame asserts the frame is exactly the screen height, that content
+// rows keep state.RightSlack cells free at the edge (where an emoji drawn
+// wider than measured would otherwise wrap), and that the bottom row fits.
+func checkFrame(t *testing.T, view string, width, height int) {
 	t.Helper()
 	lines := strings.Split(view, "\n")
 	if len(lines) != height {
-		t.Fatalf("frame is %d lines, screen is %d", len(lines), height)
+		t.Fatalf("%dx%d: frame is %d lines", width, height, len(lines))
 	}
-	for i, line := range lines[:len(lines)-1] { // the help bar may use every column
-		if w := lipgloss.Width(line); w > width-slack {
-			t.Errorf("line %d is %d cells, limit %d: %q", i, w, width-slack, line)
+	limit := width - state.RightSlack
+	for i, line := range lines[:len(lines)-1] {
+		if w := lipgloss.Width(line); w > limit {
+			t.Fatalf("%dx%d: line %d is %d cells, limit %d: %q", width, height, i, w, limit, line)
 		}
+	}
+	if w := lipgloss.Width(lines[len(lines)-1]); w > width {
+		t.Fatalf("%dx%d: bottom row is %d cells: %q", width, height, w, lines[len(lines)-1])
 	}
 }
 
 func Test_FrameFitsScreen(t *testing.T) {
-	for _, size := range [][2]int{{80, 24}, {120, 40}, {160, 50}, {50, 15}} {
-		width, height := size[0], size[1]
-		t.Run(fmt.Sprintf("%dx%d", width, height), func(t *testing.T) {
-			client := &fakeClient{
-				users:   map[string]models.User{"octocat": busyUser()},
-				readmes: map[string]string{"octocat/octocat": "# hi\n\n🤘🏼 " + strings.Repeat("word ", 300)},
-			}
+	client := &fakeClient{
+		users:   map[string]models.User{"octocat": busyUser()},
+		readmes: map[string]string{"octocat/octocat": "# hi\n\n🤘🏼 " + strings.Repeat("word ", 300)},
+	}
+	for width := 30; width <= 200; width++ {
+		heights := []int{24}
+		if width%10 == 0 {
+			heights = append(heights, 15)
+		}
+		for _, height := range heights {
 			m, _ := send(New(client), tea.WindowSizeMsg{Width: width, Height: height})
 			m, res := lookup(t, m, "octocat")
 			m, _ = send(m, res)
 
-			// user view: no line may come within two cells of the edge,
-			// where an emoji drawn wider than measured would wrap
-			checkFrame(t, m.View(), width, height, 2)
+			checkFrame(t, m.View(), width, height)
 			if !strings.HasPrefix(strings.Split(m.View(), "\n")[1], "> octocat") {
-				t.Errorf("search bar scrolled off the top")
+				t.Fatalf("%dx%d: search bar scrolled off the top", width, height)
 			}
 
 			// walking focus to the last pin scrolls it into view
 			for range len(busyUser().PinnedRepos) + 1 {
 				m, _ = send(m, keyRunes("j"))
 			}
-			checkFrame(t, m.View(), width, height, 2)
+			checkFrame(t, m.View(), width, height)
 			if !strings.Contains(m.View(), "repo-5") {
-				t.Errorf("focused repo-5 is not on screen")
+				t.Fatalf("%dx%d: focused repo-5 is not on screen", width, height)
 			}
 
 			// readme view
-			m, _ = send(m, keyRunes("k"))
 			for m.state.Focused().Kind != state.UserTarget {
 				m, _ = send(m, keyRunes("k"))
 			}
 			m, msgs := send(m, keyRunes("r"))
 			m, _ = send(m, find[commands.GetReadmeResponse](t, msgs))
 			if m.state.CurrentView != state.ReadmeView {
-				t.Fatalf("readme did not open")
+				t.Fatalf("%dx%d: readme did not open", width, height)
 			}
-			checkFrame(t, m.View(), width, height, 0)
-		})
+			checkFrame(t, m.View(), width, height)
+		}
+	}
+}
+
+func Test_ScrollStartsOnACardRow(t *testing.T) {
+	client := &fakeClient{users: map[string]models.User{"octocat": busyUser()}}
+	m, _ := send(New(client), tea.WindowSizeMsg{Width: 80, Height: 24})
+	m, res := lookup(t, m, "octocat")
+	m, _ = send(m, res)
+	for range len(busyUser().PinnedRepos) + 1 {
+		m, _ = send(m, keyRunes("j"))
+		// the first content row is never the bottom half of a card
+		first := strings.TrimSpace(strings.Split(m.View(), "\n")[2])
+		if strings.HasPrefix(first, "│") || strings.HasPrefix(first, "╰") {
+			t.Fatalf("focus %d: content starts mid-card: %q", m.state.Focus, first)
+		}
 	}
 }
 
@@ -127,7 +149,7 @@ func Test_ResizeKeepsFocusedCardVisible(t *testing.T) {
 	for _, size := range [][2]int{{120, 30}, {50, 18}, {36, 14}, {160, 50}} {
 		width, height := size[0], size[1]
 		m, _ = send(m, tea.WindowSizeMsg{Width: width, Height: height})
-		checkFrame(t, m.View(), width, height, 2)
+		checkFrame(t, m.View(), width, height)
 		if !strings.Contains(m.View(), "repo-5") {
 			t.Errorf("%dx%d: focused repo-5 is not on screen", width, height)
 		}

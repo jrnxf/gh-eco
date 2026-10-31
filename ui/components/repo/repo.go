@@ -23,10 +23,11 @@ const cardChrome = 6
 
 // Grid lays the repos out as cards, in two columns when width allows and
 // one otherwise. focused indexes repos, or is -1 when no repo has focus.
-// top and bottom are the first and last lines of the focused card, or -1.
-func Grid(repos []models.Repo, focused, width int) (grid string, top, bottom int) {
+// Every row of cards is rowHeight lines tall; top and bottom are the first
+// and last lines of the focused card, or -1.
+func Grid(repos []models.Repo, focused, width int) (grid string, rowHeight, top, bottom int) {
 	if len(repos) == 0 {
-		return "", -1, -1
+		return "", 0, -1, -1
 	}
 
 	text := 0
@@ -56,12 +57,12 @@ func Grid(repos []models.Repo, focused, width int) (grid string, top, bottom int
 	}
 	grid = lipgloss.JoinHorizontal(lipgloss.Top, rendered...)
 
+	rowHeight = lipgloss.Height(cols[0][0])
 	if focused < 0 || focused >= len(repos) {
-		return grid, -1, -1
+		return grid, rowHeight, -1, -1
 	}
-	height := lipgloss.Height(cols[0][0])
-	top = focused / columns * height
-	return grid, top, top + height - 1
+	top = focused / columns * rowHeight
+	return grid, rowHeight, top, top + rowHeight - 1
 }
 
 // card renders one repo in a frame whose text area is width cells wide.

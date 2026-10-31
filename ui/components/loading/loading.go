@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // Delay is how long a request must be pending before the spinner shows.
@@ -78,6 +79,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) View() string {
-	return m.spinner.View() + " " + labelStyle.Render(m.label)
+// View renders the spinner and label, cut to width.
+func (m Model) View(width int) string {
+	return ansi.Truncate(m.spinner.View()+" "+labelStyle.Render(m.label), width, "…")
 }

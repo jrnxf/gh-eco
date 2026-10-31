@@ -17,11 +17,6 @@ import (
 	"github.com/jrnxf/gh-eco/ui/styles"
 )
 
-// rightSlack keeps every line this many cells short of the screen edge.
-// Some emoji draw wider than lipgloss measures them; a line that reached the
-// last column would then wrap and shift the whole frame down.
-const rightSlack = 2
-
 // maxErrorWidth wraps long error messages to a readable width.
 const maxErrorWidth = 60
 
@@ -68,7 +63,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 }
 
 func (m *Model) build() {
-	width := max(0, m.state.Layout.ContentWidth-rightSlack)
+	width := max(0, m.state.Layout.ContentWidth-state.RightSlack)
 	u := m.state.User
 
 	var blocks []string
@@ -97,12 +92,14 @@ func (m *Model) build() {
 	}
 
 	focusTop, focusBottom := 0, 0
+	gridTop, rowHeight := 0, 0
 	if u.Login != "" && m.err == nil {
 		focused := -1
 		if t := m.state.Focused(); t.Kind == state.RepoTarget {
 			focused = t.Repo
 		}
-		grid, top, bottom := repo.Grid(u.PinnedRepos, focused, width)
+		grid, height, top, bottom := repo.Grid(u.PinnedRepos, focused, width)
+		gridTop, rowHeight = len(lines), height
 		if top >= 0 {
 			focusTop, focusBottom = len(lines)+top, len(lines)+bottom
 		}
@@ -118,10 +115,13 @@ func (m *Model) build() {
 		if focusTop < m.offset {
 			m.offset = focusTop
 		} else if focusBottom >= m.offset+height {
-			m.offset = focusBottom - height + 1
+			m.offset = min(snapToRow(focusBottom-height+1, gridTop, rowHeight), focusTop)
 		}
 	}
-	m.offset = max(0, min(m.offset, len(m.lines)-m.state.Layout.ContentHeight))
+	// the last screenful may end in blank lines so that it, too, starts on
+	// a whole row of cards
+	maxOffset := snapToRow(len(m.lines)-m.state.Layout.ContentHeight, gridTop, rowHeight)
+	m.offset = max(0, min(m.offset, maxOffset))
 }
 
 // header is the name, bio, follower counts and links, one block each.
@@ -180,6 +180,16 @@ func (m Model) header(width int) []string {
 		blocks = blocks[:len(blocks)-1]
 	}
 	return blocks
+}
+
+// snapToRow moves an offset that falls inside the card grid down to the
+// next row boundary, so the top line is never a stray half card.
+func snapToRow(offset, gridTop, rowHeight int) int {
+	if rowHeight == 0 || offset <= gridTop {
+		return offset
+	}
+	rows := (offset - gridTop + rowHeight - 1) / rowHeight
+	return gridTop + rows*rowHeight
 }
 
 // centerBlock indents every line of block by the same amount so the block
