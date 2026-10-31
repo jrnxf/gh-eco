@@ -101,13 +101,6 @@ Other interactions I think would be nice include:
   status, etc). These are easy to display but I'm intentionally keeping things lightweight for now
 - trending users, repos, etc.
 
-**🧪 Tests**
-
-To date only a small amount of tests have been written. I feel comfortable writing tests for smaller
-utility functions, but I'd love to do more integration type testing on the underlying [Bubble
-Tea](https://github.com/charmbracelet/bubbletea) implementation. If you have any experience with
-this please feel free to open an issue / pull request and start the discussion!
-
 ## Limitations
 
 - Some emoji are drawn at different widths by different terminals, so a card border next to one
