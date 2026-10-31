@@ -25,7 +25,7 @@ func main() {
 
 	client, err := github.NewClient()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "gh-eco requires GitHub CLI authentication — run `gh auth login` and try again.")
+		fmt.Fprintln(os.Stderr, "gh-eco requires GitHub CLI authentication: run `gh auth login` and try again.")
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

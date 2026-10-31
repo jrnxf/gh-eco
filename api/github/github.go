@@ -6,61 +6,79 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"sync"
+	"time"
 
-	gh "github.com/cli/go-gh/v2"
 	"github.com/cli/go-gh/v2/pkg/api"
 	"github.com/jrnxf/gh-eco/api/github/mutations"
 	"github.com/jrnxf/gh-eco/api/github/queries"
 	"github.com/jrnxf/gh-eco/models"
-	ghv4 "github.com/shurcooL/githubv4"
-	"golang.org/x/oauth2"
 )
 
 // GhEcoRepoID is the node id of the jrnxf/gh-eco repository.
 const GhEcoRepoID = "R_kgDOHVAImQ"
 
-// Client talks to the GitHub API with the credentials of the gh CLI.
+// requestTimeout bounds every API request, so a stalled connection ends in
+// an error instead of a spinner that never stops.
+const requestTimeout = 15 * time.Second
+
+// Client talks to the GitHub API with the credentials of the gh CLI, on the
+// host gh is configured for.
 type Client struct {
-	gql  *ghv4.Client
+	gql  *api.GraphQLClient
 	rest *api.RESTClient
+
+	mu sync.Mutex
+	// readmes caches decoded readmes by owner/name for the session.
+	readmes map[string]string
 }
 
-// NewClient builds a Client from the gh CLI's authentication.
+// NewClient builds a Client from the gh CLI's configuration.
 func NewClient() (*Client, error) {
-	output, _, err := gh.Exec("auth", "token")
-	if err != nil {
-		return nil, fmt.Errorf("unable to retrieve gh auth token: %w", err)
+	return NewClientWithOptions(api.ClientOptions{})
+}
+
+// NewClientWithOptions builds a Client with explicit go-gh options; unset
+// options are resolved from the gh CLI's configuration.
+func NewClientWithOptions(opts api.ClientOptions) (*Client, error) {
+	if opts.Timeout == 0 {
+		opts.Timeout = requestTimeout
 	}
-	token := strings.TrimSpace(output.String())
-	if token == "" {
-		return nil, fmt.Errorf("empty gh auth token")
-	}
-	rest, err := api.DefaultRESTClient()
+	gql, err := api.NewGraphQLClient(opts)
 	if err != nil {
 		return nil, err
 	}
-	src := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
-	return &Client{
-		gql:  ghv4.NewClient(oauth2.NewClient(context.Background(), src)),
-		rest: rest,
-	}, nil
+	rest, err := api.NewRESTClient(opts)
+	if err != nil {
+		return nil, err
+	}
+	return &Client{gql: gql, rest: rest, readmes: map[string]string{}}, nil
 }
 
 // User fetches a profile, its pinned repositories and its contribution graph.
 func (c *Client) User(ctx context.Context, login string) (models.User, error) {
 	var query queries.GetUserQuery
 	variables := map[string]interface{}{
-		"login": ghv4.String(login),
-		"first": ghv4.Int(6),
+		"login": queries.String(login),
+		"first": queries.Int(6),
 	}
-	if err := c.gql.Query(ctx, &query, variables); err != nil {
+	if err := c.gql.QueryWithContext(ctx, "GetUser", &query, variables); err != nil {
 		return models.User{}, err
 	}
 	return mapUser(query), nil
 }
 
-// Readme fetches the decoded readme of owner/name.
+// Readme fetches the decoded readme of owner/name. Readmes are cached for
+// the session, so toggling back to one is instant.
 func (c *Client) Readme(ctx context.Context, owner, name string) (string, error) {
+	key := strings.ToLower(owner + "/" + name)
+	c.mu.Lock()
+	text, ok := c.readmes[key]
+	c.mu.Unlock()
+	if ok {
+		return text, nil
+	}
+
 	var response struct {
 		Content  string `json:"content"`
 		Encoding string `json:"encoding"`
@@ -69,14 +87,24 @@ func (c *Client) Readme(ctx context.Context, owner, name string) (string, error)
 	if err := c.rest.DoWithContext(ctx, "GET", path, nil, &response); err != nil {
 		return "", err
 	}
-	return decodeReadmeContent(response.Content, response.Encoding)
+	text, err := decodeReadmeContent(response.Content, response.Encoding)
+	if err != nil {
+		return "", err
+	}
+
+	c.mu.Lock()
+	c.readmes[key] = text
+	c.mu.Unlock()
+	return text, nil
 }
 
 // Star stars the starrable with the given node id.
 func (c *Client) Star(ctx context.Context, id string) (models.Starrable, error) {
 	var mutation mutations.AddStarMutation
-	input := ghv4.AddStarInput{StarrableID: ghv4.ID(id)}
-	if err := c.gql.Mutate(ctx, &mutation, input, nil); err != nil {
+	variables := map[string]interface{}{
+		"input": mutations.AddStarInput{StarrableID: id},
+	}
+	if err := c.gql.MutateWithContext(ctx, "AddStar", &mutation, variables); err != nil {
 		return models.Starrable{}, err
 	}
 	return models.Starrable(mutation.AddStar.Starrable), nil
@@ -85,8 +113,10 @@ func (c *Client) Star(ctx context.Context, id string) (models.Starrable, error) 
 // Unstar removes the viewer's star from the starrable with the given node id.
 func (c *Client) Unstar(ctx context.Context, id string) (models.Starrable, error) {
 	var mutation mutations.RemoveStarMutation
-	input := ghv4.RemoveStarInput{StarrableID: ghv4.ID(id)}
-	if err := c.gql.Mutate(ctx, &mutation, input, nil); err != nil {
+	variables := map[string]interface{}{
+		"input": mutations.RemoveStarInput{StarrableID: id},
+	}
+	if err := c.gql.MutateWithContext(ctx, "RemoveStar", &mutation, variables); err != nil {
 		return models.Starrable{}, err
 	}
 	return models.Starrable(mutation.RemoveStar.Starrable), nil

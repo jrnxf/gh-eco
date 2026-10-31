@@ -53,3 +53,10 @@ type PinnedItem struct {
 		}
 	} `graphql:"... on Repository"`
 }
+
+// String and Int carry their GraphQL type names, which the client derives
+// variable declarations from.
+type (
+	String string
+	Int    int32
+)

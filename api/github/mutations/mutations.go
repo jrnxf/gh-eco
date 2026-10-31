@@ -19,3 +19,13 @@ type RemoveStarMutation struct {
 		}
 	} `graphql:"removeStar(input: $input)"`
 }
+
+// AddStarInput and RemoveStarInput are named after their GraphQL input
+// types, which the client derives the variable declaration from.
+type AddStarInput struct {
+	StarrableID string `json:"starrableId"`
+}
+
+type RemoveStarInput struct {
+	StarrableID string `json:"starrableId"`
+}
