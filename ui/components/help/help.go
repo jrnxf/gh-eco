@@ -5,20 +5,21 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/jrnxf/gh-eco/ui/context"
-	"github.com/jrnxf/gh-eco/utils"
+	"github.com/jrnxf/gh-eco/ui/keys"
+	"github.com/jrnxf/gh-eco/ui/state"
 )
 
 type Model struct {
-	keys utils.KeyMap
-	help baseHelp.Model
-	ctx  *context.ProgramContext
+	keys  keys.KeyMap
+	help  baseHelp.Model
+	state *state.State
 }
 
-func NewModel() Model {
+func NewModel(s *state.State) Model {
 	return Model{
-		keys: utils.Keys,
-		help: baseHelp.NewModel(),
+		keys:  keys.Keys,
+		help:  baseHelp.NewModel(),
+		state: s,
 	}
 }
 
@@ -37,22 +38,22 @@ func (m Model) View() string {
 
 func (m Model) collectHelpBindings() []key.Binding {
 	k := m.keys
+	s := m.state
 	bindings := []key.Binding{}
-	switch m.ctx.Mode {
-	case context.InsertMode:
+	switch s.Mode {
+	case state.InsertMode:
 		bindings = append(bindings, k.Search)
-	case context.NormalMode:
-		if m.ctx.User.Login == "" {
+	case state.NormalMode:
+		if s.User.Login == "" {
 			// user has not yet loaded
 			bindings = append(bindings, k.Search)
 		} else {
-			if m.ctx.CurrentView == context.UserView {
-				fw := m.ctx.CurrentFocus.FocusedWidget
+			if s.CurrentView == state.UserView {
 				bindings = append(bindings, k.FocusInput, k.FocusNext, k.FocusPrev, k.ToggleReadme, k.OpenGithub)
-				if fw.Type == context.RepoWidget {
+				if s.Focused().Kind == state.RepoTarget {
 					bindings = append(bindings, k.StarRepo)
 				}
-			} else if m.ctx.CurrentView == context.ReadmeView {
+			} else if s.CurrentView == state.ReadmeView {
 				bindings = append(bindings, k.FocusNext, k.FocusPrev, k.PreviewPageDown, k.PreviewPageUp, k.ToggleReadme, k.StarRepo, k.OpenGithub)
 			}
 			bindings = append(bindings, k.StarGhEco)
@@ -61,12 +62,4 @@ func (m Model) collectHelpBindings() []key.Binding {
 	bindings = append(bindings, k.Quit)
 
 	return bindings
-
-}
-
-func (m *Model) UpdateProgramContext(ctx *context.ProgramContext) {
-	if ctx == nil {
-		return
-	}
-	m.ctx = ctx
 }

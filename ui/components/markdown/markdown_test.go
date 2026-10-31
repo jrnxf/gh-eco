@@ -7,23 +7,21 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/jrnxf/gh-eco/ui/commands"
-	"github.com/jrnxf/gh-eco/ui/context"
-	"github.com/jrnxf/gh-eco/ui/models"
+	"github.com/jrnxf/gh-eco/ui/state"
 )
 
 const tableReadme = "# demo\n\n| a | b |\n|---|---|\n| 1 | 2 |\n"
 
 func Test_ReadmeTableFitsViewport(t *testing.T) {
-	ctx := &context.ProgramContext{}
-	m := NewModel()
-	m.UpdateProgramContext(ctx)
+	s := &state.State{}
+	m := NewModel(s)
 
-	ctx.Layout.ContentWidth, ctx.Layout.ContentHeight = 120, 40
+	s.Layout.ContentWidth, s.Layout.ContentHeight = 120, 40
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-	m, _ = m.Update(commands.GetReadmeResponse{Readme: models.Blob{Text: tableReadme}})
+	m, _ = m.Update(commands.GetReadmeResponse{Readme: tableReadme})
 
 	// shrinking after the readme loaded must re-wrap it to the new width
-	ctx.Layout.ContentWidth = 80
+	s.Layout.ContentWidth = 80
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 40})
 
 	if m.Viewport.Width != 80 {

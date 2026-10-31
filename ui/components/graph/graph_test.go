@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jrnxf/gh-eco/ui/models"
+	"github.com/jrnxf/gh-eco/models"
 )
 
 func Test_BuildGraphDisplay_Empty(t *testing.T) {

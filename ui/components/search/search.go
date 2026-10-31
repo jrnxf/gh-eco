@@ -8,42 +8,38 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/jrnxf/gh-eco/api/github"
 	"github.com/jrnxf/gh-eco/ui/commands"
 	"github.com/jrnxf/gh-eco/ui/components/spinner"
-	"github.com/jrnxf/gh-eco/ui/context"
+	"github.com/jrnxf/gh-eco/ui/keys"
+	"github.com/jrnxf/gh-eco/ui/state"
 	"github.com/jrnxf/gh-eco/utils"
 )
 
 type Model struct {
-	keys      utils.KeyMap
+	keys      keys.KeyMap
 	textInput textinput.Model
 	spinner   spinner.Model
 	fetching  bool
-	err       error
-	ctx       *context.ProgramContext
+	state     *state.State
 }
 
-func NewModel() Model {
+func NewModel(s *state.State) Model {
 	ti := textinput.NewModel()
 	ti.Focus()
 	ti.Placeholder = "search by username"
 
 	return Model{
-		keys:      utils.Keys,
+		keys:      keys.Keys,
 		textInput: ti,
-		err:       nil,
-		fetching:  false,
 		spinner:   spinner.NewModel(),
+		state:     s,
 	}
 }
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	var (
-		cmd          tea.Cmd
 		spinnerCmd   tea.Cmd
 		textInputCmd tea.Cmd
-		getUserCmd   tea.Cmd
 
 		cmds []tea.Cmd
 	)
@@ -51,27 +47,24 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case tea.KeyMsg:
-		if key.Matches(msg, m.keys.Quit) {
-			cmd = tea.Quit
-		}
-
-		switch m.ctx.Mode {
-		case context.InsertMode:
+		switch m.state.Mode {
+		case state.InsertMode:
 			cmds = append(cmds, textinput.Blink)
 
-			if key.Matches(msg, m.keys.Search) && strings.TrimSpace(m.textInput.Value()) != "" {
-				m.ctx.Mode = context.NormalMode
+			if login := strings.TrimSpace(m.textInput.Value()); key.Matches(msg, m.keys.Search) && login != "" {
+				m.state.Mode = state.NormalMode
 				m.textInput.SetCursorMode(textinput.CursorHide)
-				getUserCmd = github.GetUser(m.textInput.Value())
 				m.fetching = true
-				cmds = append(cmds, m.spinner.Tick, getUserCmd)
+				cmds = append(cmds, m.spinner.Tick, func() tea.Msg {
+					return commands.SearchSubmitted{Login: login}
+				})
 			}
 
-		case context.NormalMode:
+		case state.NormalMode:
 			if key.Matches(msg, m.keys.FocusInput) {
-				if m.ctx.CurrentView == context.UserView {
+				if m.state.CurrentView == state.UserView {
 					m.textInput.Reset()
-					m.ctx.Mode = context.InsertMode
+					m.state.Mode = state.InsertMode
 					m.textInput.SetCursorMode(textinput.CursorBlink)
 					return m, textinput.Blink
 				}
@@ -82,7 +75,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.fetching = false
 	}
 
-	if m.ctx.Mode == context.InsertMode {
+	if m.state.Mode == state.InsertMode {
 		m.textInput, textInputCmd = m.textInput.Update(msg)
 	}
 
@@ -92,7 +85,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.spinner, spinnerCmd = m.spinner.Update(msg)
 	}
 
-	cmds = append(cmds, cmd, spinnerCmd, textInputCmd)
+	cmds = append(cmds, spinnerCmd, textInputCmd)
 	return m, tea.Batch(cmds...)
 }
 
@@ -109,11 +102,4 @@ func (m Model) View() string {
 	}
 
 	return lipgloss.NewStyle().Render(b.String())
-}
-
-func (m *Model) UpdateProgramContext(ctx *context.ProgramContext) {
-	if ctx == nil {
-		return
-	}
-	m.ctx = ctx
 }

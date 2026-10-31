@@ -7,116 +7,54 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/jrnxf/gh-eco/models"
 	"github.com/jrnxf/gh-eco/ui/commands"
 	"github.com/jrnxf/gh-eco/ui/components/graph"
 	"github.com/jrnxf/gh-eco/ui/components/repo"
-	"github.com/jrnxf/gh-eco/ui/context"
-	"github.com/jrnxf/gh-eco/ui/models"
+	"github.com/jrnxf/gh-eco/ui/state"
 	"github.com/jrnxf/gh-eco/ui/styles"
 	"github.com/jrnxf/gh-eco/utils"
 	"golang.org/x/term"
 )
 
 type Model struct {
-	User    models.User
 	display string
 	err     error
-	ctx     *context.ProgramContext
+	state   *state.State
 }
 
-func NewModel() Model {
-	return Model{
-		User: models.User{},
-		err:  nil,
-	}
+func NewModel(s *state.State) Model {
+	return Model{state: s}
 }
 
+// Update rebuilds the display after every message, since the root model may
+// have changed the user, the focus or the layout.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
-	var (
-		cmd  tea.Cmd
-		cmds []tea.Cmd
-	)
-
-	switch msg := msg.(type) {
-	case commands.GetUserResponse:
-		if msg.Err != nil {
-			m.err = msg.Err
-		} else {
-			m.User = msg.User
-			m.ctx.User = msg.User
-			m.err = nil
-		}
-		m.buildDisplay()
-	case commands.FocusChange:
-		m.buildDisplay()
-
-	case tea.WindowSizeMsg:
-		m.buildDisplay()
-	case commands.StarStarrableResponse:
-		if msg.Err != nil {
-			cmds = append(cmds, func() tea.Msg {
-				return commands.SetMessage{Content: "star failed 😕", SecondsDisplayed: 2}
-			})
-			break
-		}
-		for i, r := range m.ctx.User.PinnedRepos {
-			if r.Id == msg.Starrable.Id {
-				m.ctx.User.PinnedRepos[i].ViewerHasStarred = msg.Starrable.ViewerHasStarred
-				m.ctx.User.PinnedRepos[i].StarsCount = msg.Starrable.StargazerCount
-				m.ctx.CurrentFocus.FocusedWidget.Repo.ViewerHasStarred = msg.Starrable.ViewerHasStarred
-				m.ctx.CurrentFocus.FocusedWidget.Repo.StarsCount = msg.Starrable.StargazerCount
-			}
-		}
-		m.buildDisplay()
-
-	case commands.RemoveStarStarrableResponse:
-		if msg.Err != nil {
-			cmds = append(cmds, func() tea.Msg {
-				return commands.SetMessage{Content: "unstar failed 😕", SecondsDisplayed: 2}
-			})
-			break
-		}
-		for i, r := range m.ctx.User.PinnedRepos {
-			if r.Id == msg.Starrable.Id {
-				m.ctx.User.PinnedRepos[i].ViewerHasStarred = msg.Starrable.ViewerHasStarred
-				m.ctx.User.PinnedRepos[i].StarsCount = msg.Starrable.StargazerCount
-				m.ctx.CurrentFocus.FocusedWidget.Repo.ViewerHasStarred = msg.Starrable.ViewerHasStarred
-				m.ctx.CurrentFocus.FocusedWidget.Repo.StarsCount = msg.Starrable.StargazerCount
-			}
-		}
-		m.buildDisplay()
+	if msg, ok := msg.(commands.GetUserResponse); ok {
+		m.err = msg.Err
 	}
-
-	cmds = append(cmds, cmd)
-	return m, tea.Batch(cmds...)
+	m.buildDisplay()
+	return m, nil
 }
 
 func (m Model) buildUserDisplay() string {
-	u := m.User
+	u := m.state.User
+	focused := m.state.Focused().Kind == state.UserTarget
 
 	var b strings.Builder
 	w := b.WriteString
 
-	if u.Name == "" && u.Login != "" {
+	name := u.Name
+	if name == "" {
 		// user hasn't specified their name on github
-		if m.ctx.CurrentFocus.FocusedWidget.Descriptor == "UserDisplay" {
-			w(styles.FocusedBold.Render(u.Login))
-		} else {
-			w(styles.Bold.Render(u.Login))
-
-		}
-		w(utils.GetNewLines(2))
-
+		name = u.Login
 	}
-	if u.Name != "" {
-		if m.ctx.CurrentFocus.FocusedWidget.Descriptor == "UserDisplay" {
-			w(styles.FocusedBold.Render(u.Name))
-		} else {
-			w(styles.Bold.Render(u.Name))
-		}
-		w(utils.GetNewLines(2))
-
+	if focused {
+		w(styles.FocusedBold.Render(name))
+	} else {
+		w(styles.Bold.Render(name))
 	}
+	w(utils.GetNewLines(2))
 
 	if u.Bio != "" {
 		w(lipgloss.NewStyle().Faint(true).Align(lipgloss.Center).Render(u.Bio))
@@ -156,30 +94,19 @@ func (m Model) buildUserDisplay() string {
 		w(utils.GetNewLines(1))
 	}
 
-	m.ctx.FocusableWidgets = append(m.ctx.FocusableWidgets, context.FocusableWidget{Descriptor: "UserDisplay", Type: context.UserWidget, User: m.User})
-
 	return b.String()
 }
 
 func (m *Model) buildDisplay() {
-	// buildDisplay is the only path that appends to FocusableWidgets
-	// (directly via buildUserDisplay and via repo.BuildPinnedRepoDisplay),
-	// so it owns resetting the list to keep rebuilds idempotent.
-	m.ctx.FocusableWidgets = []context.FocusableWidget{
-		{
-			Descriptor: "NoFocus",
-		},
-	}
-
 	physicalWidth, _, _ := term.GetSize(int(os.Stdout.Fd()))
 
 	var b strings.Builder
 	w := b.WriteString
 
-	u := m.User
+	u := m.state.User
 	if m.err != nil {
 		w("no results")
-	} else if m.User.Login != "" {
+	} else if u.Login != "" {
 		w(m.buildUserDisplay())
 
 		w(utils.GetNewLines(2))
@@ -194,15 +121,17 @@ func (m *Model) buildDisplay() {
 
 		w(utils.GetNewLines(2))
 
+		focusedRepo := -1
+		if t := m.state.Focused(); t.Kind == state.RepoTarget {
+			focusedRepo = t.Repo
+		}
 		w(lipgloss.NewStyle().
-			Align(lipgloss.Center).Render(repo.BuildPinnedRepoDisplay(u.PinnedRepos, m.ctx)))
-
+			Align(lipgloss.Center).Render(repo.BuildPinnedRepoDisplay(u.PinnedRepos, focusedRepo)))
 	}
 
 	m.display = lipgloss.NewStyle().
 		Align(lipgloss.Center).
 		Width(physicalWidth).Render(b.String())
-
 }
 
 // fitWeeks keeps the most recent weeks that fit in width, since each week
@@ -215,12 +144,5 @@ func fitWeeks(weeks []models.WeeklyContribution, width int) []models.WeeklyContr
 }
 
 func (m Model) View() string {
-	return lipgloss.NewStyle().Height(m.ctx.Layout.ContentHeight).Render(m.display)
-}
-
-func (m *Model) UpdateProgramContext(ctx *context.ProgramContext) {
-	if ctx == nil {
-		return
-	}
-	m.ctx = ctx
+	return lipgloss.NewStyle().Height(m.state.Layout.ContentHeight).Render(m.display)
 }

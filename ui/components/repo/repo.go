@@ -5,14 +5,12 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/jrnxf/gh-eco/ui/context"
-	"github.com/jrnxf/gh-eco/ui/models"
+	"github.com/jrnxf/gh-eco/models"
 	"github.com/jrnxf/gh-eco/ui/styles"
 	"github.com/jrnxf/gh-eco/utils"
 )
 
 func buildRepoDisplay(repo models.Repo, width int, isFocused bool, viewerHasStarred bool) string {
-	// prep the finished matrix
 	var b strings.Builder
 	w := b.WriteString
 
@@ -36,10 +34,11 @@ func buildRepoDisplay(repo models.Repo, width int, isFocused bool, viewerHasStar
 
 	return lipgloss.NewStyle().
 		Align(lipgloss.Left).Render(styles.Frame.Render(b.String()))
-
 }
 
-func BuildPinnedRepoDisplay(repos []models.Repo, ctx *context.ProgramContext) string {
+// BuildPinnedRepoDisplay lays the repos out in two columns. focused indexes
+// repos, or is -1 when no repo has focus.
+func BuildPinnedRepoDisplay(repos []models.Repo, focused int) string {
 	var lc strings.Builder // left col
 	var rc strings.Builder // right col
 
@@ -53,11 +52,7 @@ func BuildPinnedRepoDisplay(repos []models.Repo, ctx *context.ProgramContext) st
 
 	for i, r := range repos {
 		currRepoDescLength := len(utils.TruncateText(r.Description, 60))
-
-		widgetName := fmt.Sprintf("PinnedRepo%v", i+1)
-		ctx.FocusableWidgets = append(ctx.FocusableWidgets, context.FocusableWidget{Type: context.RepoWidget, Repo: r, Descriptor: widgetName})
-		fw := ctx.CurrentFocus.FocusedWidget
-		display := buildRepoDisplay(r, maxRepoDescLength-currRepoDescLength, fw.Descriptor == widgetName, r.ViewerHasStarred) + utils.GetNewLines(1)
+		display := buildRepoDisplay(r, maxRepoDescLength-currRepoDescLength, i == focused, r.ViewerHasStarred) + utils.GetNewLines(1)
 		if i%2 == 0 {
 			lc.WriteString(display)
 		} else {

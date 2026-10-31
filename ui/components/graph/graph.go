@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/jrnxf/gh-eco/ui/models"
+	"github.com/jrnxf/gh-eco/models"
 	"github.com/jrnxf/gh-eco/utils"
 )
 

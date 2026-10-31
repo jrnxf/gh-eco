@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/jrnxf/gh-eco/ui/commands"
-	"github.com/jrnxf/gh-eco/ui/context"
+	"github.com/jrnxf/gh-eco/ui/state"
 	"github.com/jrnxf/gh-eco/ui/styles"
 	"github.com/jrnxf/gh-eco/utils"
 
@@ -23,18 +23,16 @@ const maxWordWrap = 100
 
 type Model struct {
 	Viewport viewport.Model
-	ctx      *context.ProgramContext
+	state    *state.State
 	style    ansi.StyleConfig
 	readme   string
 }
 
-func NewModel() Model {
+func NewModel(s *state.State) Model {
 	return Model{
-		Viewport: viewport.Model{
-			Width:  0,
-			Height: 0,
-		},
-		style: autoStyle(),
+		Viewport: viewport.New(0, 0),
+		state:    s,
+		style:    autoStyle(),
 	}
 }
 
@@ -67,43 +65,40 @@ func (m Model) renderReadme() string {
 }
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
-	var (
-		cmd  tea.Cmd
-		cmds []tea.Cmd
-	)
+	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
-
 	case tea.KeyMsg:
-		if m.ctx.Mode == context.NormalMode {
+		if m.state.Mode == state.NormalMode {
 			// only listen for keyboard events if in normal mode
 			m.Viewport, cmd = m.Viewport.Update(msg)
 		}
 
 	case commands.GetReadmeResponse:
-		m.readme = msg.Readme.Text
-		m.Viewport.SetYOffset(0) // scroll to top
-		m.Viewport.SetContent(m.renderReadme())
-
-	case commands.LayoutChange:
-		m.calculateViewportDimensions()
-
-	case tea.WindowSizeMsg:
-		m.calculateViewportDimensions()
-		m.Viewport.SetContent(m.renderReadme())
+		if msg.Err == nil {
+			m.readme = msg.Readme
+			m.Viewport.SetContent(m.renderReadme())
+			m.Viewport.GotoTop()
+		}
 
 	default:
 		// Handle other events (like mouse events)
 		m.Viewport, cmd = m.Viewport.Update(msg)
 	}
 
-	cmds = append(cmds, cmd)
-	return m, tea.Batch(cmds...)
+	m.fitViewport()
+	return m, cmd
 }
 
-func (m *Model) calculateViewportDimensions() {
-	m.Viewport.Width = m.ctx.Layout.ContentWidth
-	m.Viewport.Height = m.ctx.Layout.ContentHeight - lipgloss.Height(m.footerView())
+// fitViewport sizes the viewport to the content area, re-wrapping the
+// readme when the width changes.
+func (m *Model) fitViewport() {
+	l := m.state.Layout
+	m.Viewport.Height = max(0, l.ContentHeight-lipgloss.Height(m.footerView()))
+	if m.Viewport.Width != l.ContentWidth {
+		m.Viewport.Width = l.ContentWidth
+		m.Viewport.SetContent(m.renderReadme())
+	}
 }
 
 func (m Model) View() string {
@@ -115,12 +110,4 @@ func (m Model) footerView() string {
 	line := strings.Repeat("─", utils.MaxInt(0, m.Viewport.Width-lipgloss.Width(scrollPercentage)))
 
 	return styles.FaintBold.Render(lipgloss.JoinHorizontal(lipgloss.Center, line, scrollPercentage))
-}
-
-func (m *Model) UpdateProgramContext(ctx *context.ProgramContext) {
-	if ctx == nil {
-		return
-	}
-	m.ctx = ctx
-
 }

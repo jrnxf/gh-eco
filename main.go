@@ -23,13 +23,14 @@ func main() {
 		log.SetOutput(io.Discard)
 	}
 
-	if _, err := github.GetClient(); err != nil {
+	client, err := github.NewClient()
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "gh-eco requires GitHub CLI authentication — run `gh auth login` and try again.")
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 
-	p := tea.NewProgram(ui.New(), tea.WithAltScreen(), tea.WithMouseAllMotion())
+	p := tea.NewProgram(ui.New(client), tea.WithAltScreen(), tea.WithMouseAllMotion())
 
 	if _, err := p.Run(); err != nil {
 		log.Fatal(err)

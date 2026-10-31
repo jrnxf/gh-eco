@@ -7,9 +7,6 @@ import (
 	"runtime"
 	"strings"
 	"unicode"
-
-	"github.com/jrnxf/gh-eco/api/github/queries"
-	"github.com/jrnxf/gh-eco/ui/models"
 )
 
 func TruncateText(str string, max int) string {
@@ -66,48 +63,6 @@ func GetNewLines(n int) string {
 		return ""
 	}
 	return strings.Repeat("\n", n)
-}
-
-func MapGetUserQueryToDisplayUser(query queries.GetUserQuery) models.User {
-	qu := query.User
-	du := models.User{
-		Login:             qu.Login,
-		Name:              qu.Name,
-		Location:          qu.Location,
-		Url:               qu.Url,
-		Bio:               qu.Bio,
-		TwitterUsername:   qu.TwitterUsername,
-		WebsiteUrl:        qu.WebsiteUrl,
-		FollowersCount:    qu.Followers.TotalCount,
-		FollowingCount:    qu.Following.TotalCount,
-		IsViewer:          qu.IsViewer,
-		IsFollowingViewer: qu.IsFollowingViewer,
-		ViewerIsFollowing: qu.ViewerIsFollowing,
-	}
-
-	du.ActivityGraph.ContributionsCount = qu.ContributionsCollection.ContributionCalendar.TotalContributions
-
-	for _, week := range qu.ContributionsCollection.ContributionCalendar.Weeks {
-		du.ActivityGraph.Weeks = append(du.ActivityGraph.Weeks, week)
-	}
-
-	for _, node := range qu.PinnedItems.Nodes {
-		r := node.Repository
-		du.PinnedRepos = append(du.PinnedRepos, models.Repo{
-			Id:               r.Id,
-			Name:             r.Name,
-			Description:      r.Description,
-			StarsCount:       r.StargazerCount,
-			ViewerHasStarred: r.ViewerHasStarred,
-			Owner: struct{ Login string }{
-				Login: r.Owner.Login,
-			},
-			Url:             r.Url,
-			PrimaryLanguage: r.PrimaryLanguage,
-		})
-	}
-
-	return du
 }
 
 func MaxInt(a, b int) int {

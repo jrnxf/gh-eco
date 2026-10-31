@@ -1,213 +1,221 @@
 package ui
 
 import (
+	"context"
+
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/jrnxf/gh-eco/api/github"
+	"github.com/jrnxf/gh-eco/models"
 	"github.com/jrnxf/gh-eco/ui/commands"
 	"github.com/jrnxf/gh-eco/ui/components/help"
 	"github.com/jrnxf/gh-eco/ui/components/markdown"
 	"github.com/jrnxf/gh-eco/ui/components/message"
 	"github.com/jrnxf/gh-eco/ui/components/search"
 	"github.com/jrnxf/gh-eco/ui/components/user"
-	"github.com/jrnxf/gh-eco/ui/context"
+	"github.com/jrnxf/gh-eco/ui/keys"
+	"github.com/jrnxf/gh-eco/ui/state"
 	"github.com/jrnxf/gh-eco/utils"
 )
 
+// Client is the GitHub API the UI depends on.
+type Client interface {
+	User(ctx context.Context, login string) (models.User, error)
+	Readme(ctx context.Context, owner, name string) (string, error)
+	Star(ctx context.Context, id string) (models.Starrable, error)
+	Unstar(ctx context.Context, id string) (models.Starrable, error)
+}
+
 type Model struct {
-	keys     utils.KeyMap
+	client   Client
+	state    *state.State
+	keys     keys.KeyMap
 	search   search.Model
 	user     user.Model
 	markdown markdown.Model
 	help     help.Model
 	message  message.Model
-	ctx      context.ProgramContext
+	// userReq identifies the latest user lookup.
+	userReq int
 }
 
-func New() Model {
-	m := Model{
-		keys:     utils.Keys,
-		search:   search.NewModel(),
-		user:     user.NewModel(),
-		markdown: markdown.NewModel(),
-		help:     help.NewModel(),
-		message:  message.NewModel(),
-		ctx: context.ProgramContext{
-			Mode:        context.InsertMode,
-			CurrentView: context.UserView,
-			LastView:    context.VoidView,
-		},
+func New(client Client) Model {
+	s := &state.State{
+		Mode:        state.InsertMode,
+		CurrentView: state.UserView,
+		LastView:    state.VoidView,
 	}
-
-	m.resetWidgets()
-	m.resetCurrentFocus()
-
-	m.syncProgramContext()
-
-	return m
+	return Model{
+		client:   client,
+		state:    s,
+		keys:     keys.Keys,
+		search:   search.NewModel(s),
+		user:     user.NewModel(s),
+		markdown: markdown.NewModel(s),
+		help:     help.NewModel(s),
+		message:  message.NewModel(s),
+	}
 }
 
 func (m Model) Init() tea.Cmd {
-	var (
-		cmds []tea.Cmd
-	)
-
-	cmds = append(cmds, textinput.Blink)
-	return tea.Batch(
-		cmds...,
-	)
+	return textinput.Blink
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var (
-		cmd             tea.Cmd
-		spinnerCmd      tea.Cmd
-		searchCmd       tea.Cmd
-		userCmd         tea.Cmd
-		helpCmd         tea.Cmd
-		messageCmd      tea.Cmd
-		markdownCmd     tea.Cmd
-		getReadmeCmd    tea.Cmd
-		starRepoCmd     tea.Cmd
-		unstarRepoCmd   tea.Cmd
-		focusChangeCmd  tea.Cmd
-		layoutChangeCmd tea.Cmd
-		cmds            []tea.Cmd
-	)
-	fw := &m.ctx.CurrentFocus.FocusedWidget
+	var cmds []tea.Cmd
+	s := m.state
 
 	switch msg := msg.(type) {
-
 	case tea.KeyMsg:
-
 		if key.Matches(msg, m.keys.Quit) {
-			cmd = tea.Quit
+			return m, tea.Quit
+		}
+		if s.Mode == state.NormalMode && s.CurrentView != state.MessageView {
+			cmds = append(cmds, m.handleNormalKey(msg))
 		}
 
-		if m.ctx.Mode == context.NormalMode && m.ctx.CurrentView != context.MessageView {
+	case commands.SearchSubmitted:
+		m.userReq++
+		cmds = append(cmds, fetchUser(m.client, msg.Login, m.userReq))
 
-			switch fw.Type {
-			case context.UserWidget:
-
-				switch {
-				case key.Matches(msg, m.keys.OpenGithub):
-					utils.BrowserOpen(fw.User.Url)
-				}
-
-			case context.RepoWidget:
-
-				switch {
-				case key.Matches(msg, m.keys.OpenGithub):
-					utils.BrowserOpen(fw.Repo.Url)
-
-				case key.Matches(msg, m.keys.StarRepo):
-					if fw.Repo.ViewerHasStarred {
-						unstarRepoCmd = github.RemoveStarStarrable(fw.Repo.Id)
-						cmds = append(cmds, unstarRepoCmd)
-					} else {
-						starRepoCmd = github.StarStarrable(fw.Repo.Id)
-						cmds = append(cmds, starRepoCmd)
-					}
-				}
-			}
-
-			if m.ctx.CurrentView == context.UserView {
-
-				switch {
-				case key.Matches(msg, m.keys.FocusNext):
-					m.focusNextWidget()
-					focusChangeCmd = m.notifyFocusChange()
-
-				case key.Matches(msg, m.keys.FocusPrev):
-					m.focusPrevWidget()
-					focusChangeCmd = m.notifyFocusChange()
-
-				case key.Matches(msg, m.keys.FocusInput):
-					if m.ctx.CurrentView == context.UserView {
-						m.resetCurrentFocus()
-						focusChangeCmd = m.notifyFocusChange()
-					}
-				}
-			}
-
-			if key.Matches(msg, m.keys.ToggleReadme) && (fw.Type == context.UserWidget || fw.Type == context.RepoWidget) {
-
-				switch m.ctx.CurrentView {
-				case context.UserView:
-					switch fw.Type {
-					case context.UserWidget:
-						// get the focused users personal readme
-						getReadmeCmd = github.GetReadme(fw.User.Login, fw.User.Login)
-
-					case context.RepoWidget:
-						// get the focused repos readme
-						getReadmeCmd = github.GetReadme(fw.Repo.Name, fw.Repo.Owner.Login)
-					}
-
-				case context.ReadmeView:
-					m.ctx.CurrentView = context.UserView
-					m.onLayoutChange()
-					layoutChangeCmd = m.notifyLayoutChange()
-				}
-			}
-
-			if key.Matches(msg, m.keys.StarGhEco) {
-				starRepoCmd = github.StarStarrable(github.GH_ECO_REPO_ID)
-				messageCmd = m.message.TriggerMessage("tysm 🥹", 2)
-				cmds = append(cmds, messageCmd, starRepoCmd)
-			}
+	case commands.GetUserResponse:
+		if msg.Req != m.userReq {
+			// a newer search superseded this one
+			return m, nil
+		}
+		if msg.Err == nil {
+			s.User = msg.User
+			s.Focus = 0
 		}
 
 	case commands.GetReadmeResponse:
 		if msg.Err != nil {
-			messageCmd = m.message.TriggerMessage("couldn't load readme 😕", 2)
-			cmds = append(cmds, messageCmd)
+			cmds = append(cmds, m.message.TriggerMessage("couldn't load readme 😕", 2))
 		} else {
-			m.ctx.CurrentView = context.ReadmeView
-			m.onLayoutChange()
-			layoutChangeCmd = m.notifyLayoutChange()
+			s.CurrentView = state.ReadmeView
 		}
 
-	case commands.GetUserResponse:
-		m.resetWidgets()
-
-	case commands.FocusChange:
-		m.resetWidgets()
+	case commands.StarResponse:
+		if msg.Err != nil {
+			text := "star failed 😕"
+			if msg.Unstar {
+				text = "unstar failed 😕"
+			}
+			cmds = append(cmds, m.message.TriggerMessage(text, 2))
+			break
+		}
+		for i := range s.User.PinnedRepos {
+			r := &s.User.PinnedRepos[i]
+			if r.Id == msg.Starrable.Id {
+				r.ViewerHasStarred = msg.Starrable.ViewerHasStarred
+				r.StarsCount = msg.Starrable.StargazerCount
+			}
+		}
 
 	case tea.WindowSizeMsg:
-		m.onWindowSizeChanged(msg)
-		m.syncProgramContext()
+		s.Layout.ScreenWidth = msg.Width
+		s.Layout.ScreenHeight = msg.Height
 	}
 
-	m.syncProgramContext()
-	m.search, searchCmd = m.search.Update(msg)
-	m.markdown, markdownCmd = m.markdown.Update(msg)
-	m.user, userCmd = m.user.Update(msg)
-	m.help, helpCmd = m.help.Update(msg)
-	m.message, messageCmd = m.message.Update(msg)
-	cmds = append(cmds, cmd, spinnerCmd, searchCmd, userCmd, helpCmd, messageCmd, markdownCmd, getReadmeCmd, focusChangeCmd, layoutChangeCmd)
+	var cmd tea.Cmd
+	m.help, cmd = m.help.Update(msg)
+	cmds = append(cmds, cmd)
+	m.search, cmd = m.search.Update(msg)
+	cmds = append(cmds, cmd)
+	m.message, cmd = m.message.Update(msg)
+	cmds = append(cmds, cmd)
+	// size the content area after every view change above, before the
+	// components that fill it
+	m.layout()
+	m.markdown, cmd = m.markdown.Update(msg)
+	cmds = append(cmds, cmd)
+	m.user, cmd = m.user.Update(msg)
+	cmds = append(cmds, cmd)
 	return m, tea.Batch(cmds...)
 }
 
-func (m Model) View() string {
+func (m *Model) handleNormalKey(msg tea.KeyMsg) tea.Cmd {
+	s := m.state
+	target := s.Focused()
 
+	switch {
+	case key.Matches(msg, m.keys.OpenGithub):
+		switch target.Kind {
+		case state.UserTarget:
+			utils.BrowserOpen(s.User.Url)
+		case state.RepoTarget:
+			utils.BrowserOpen(s.FocusedRepo().Url)
+		}
+
+	case key.Matches(msg, m.keys.StarRepo):
+		if r := s.FocusedRepo(); r != nil {
+			return star(m.client, r.Id, r.ViewerHasStarred)
+		}
+
+	case key.Matches(msg, m.keys.StarGhEco):
+		return tea.Batch(
+			m.message.TriggerMessage("tysm 🥹", 2),
+			star(m.client, github.GhEcoRepoID, false),
+		)
+
+	case key.Matches(msg, m.keys.ToggleReadme):
+		switch s.CurrentView {
+		case state.UserView:
+			switch target.Kind {
+			case state.UserTarget:
+				// a user's profile readme lives in the repo named after them
+				return fetchReadme(m.client, s.User.Login, s.User.Login)
+			case state.RepoTarget:
+				r := s.FocusedRepo()
+				return fetchReadme(m.client, r.Owner.Login, r.Name)
+			}
+		case state.ReadmeView:
+			s.CurrentView = state.UserView
+		}
+	}
+
+	if s.CurrentView == state.UserView {
+		switch {
+		case key.Matches(msg, m.keys.FocusNext):
+			s.FocusNext()
+		case key.Matches(msg, m.keys.FocusPrev):
+			s.FocusPrev()
+		case key.Matches(msg, m.keys.FocusInput):
+			s.Focus = 0
+		}
+	}
+	return nil
+}
+
+// layout sizes the content area between the search bar and the help bar.
+func (m *Model) layout() {
+	l := &m.state.Layout
+	height := l.ScreenHeight - lipgloss.Height(m.help.View())
+	if m.state.CurrentView == state.UserView {
+		height -= lipgloss.Height(m.search.View())
+	}
+	l.ContentWidth = l.ScreenWidth
+	l.ContentHeight = max(0, height)
+}
+
+func (m Model) View() string {
 	if m.message.Content != "" {
 		return m.message.View()
 	}
 
-	switch m.ctx.CurrentView {
-	case context.ReadmeView:
+	switch m.state.CurrentView {
+	case state.ReadmeView:
 		return lipgloss.JoinVertical(lipgloss.Left,
 			m.markdown.View(),
 			m.help.View(),
 		)
 
-	case context.UserView:
+	case state.UserView:
 		return lipgloss.JoinVertical(lipgloss.Left,
-			lipgloss.NewStyle().Render(m.search.View()),
+			m.search.View(),
 			m.user.View(),
 			m.help.View(),
 		)
@@ -217,74 +225,28 @@ func (m Model) View() string {
 	}
 }
 
-func (m *Model) focusNextWidget() {
-	cf := &m.ctx.CurrentFocus
-
-	numWidgets := len(m.ctx.FocusableWidgets)
-	cf.FocusIdx = (cf.FocusIdx + 1) % numWidgets
-	cf.FocusedWidget = m.ctx.FocusableWidgets[cf.FocusIdx]
-}
-
-func (m *Model) focusPrevWidget() {
-	cf := &m.ctx.CurrentFocus
-
-	numWidgets := len(m.ctx.FocusableWidgets)
-	cf.FocusIdx = (cf.FocusIdx - 1 + numWidgets) % numWidgets
-	cf.FocusedWidget = m.ctx.FocusableWidgets[cf.FocusIdx]
-}
-
-func (m Model) notifyFocusChange() tea.Cmd {
+func fetchUser(c Client, login string, req int) tea.Cmd {
 	return func() tea.Msg {
-		return commands.FocusChange{}
+		u, err := c.User(context.Background(), login)
+		return commands.GetUserResponse{Req: req, User: u, Err: err}
 	}
 }
-func (m Model) notifyLayoutChange() tea.Cmd {
+
+func fetchReadme(c Client, owner, name string) tea.Cmd {
 	return func() tea.Msg {
-		return commands.LayoutChange{}
+		text, err := c.Readme(context.Background(), owner, name)
+		return commands.GetReadmeResponse{Readme: text, Err: err}
 	}
 }
 
-func (m *Model) onWindowSizeChanged(msg tea.WindowSizeMsg) {
-	m.ctx.Layout.ScreenHeight = msg.Height
-	m.ctx.Layout.ScreenWidth = msg.Width
-
-	m.ctx.Layout.ContentHeight = msg.Height - lipgloss.Height(m.search.View()) - lipgloss.Height(m.help.View())
-	m.ctx.Layout.ContentWidth = msg.Width
-}
-
-func (m *Model) onLayoutChange() {
-	contentHeight := m.ctx.Layout.ScreenHeight - lipgloss.Height(m.help.View())
-
-	if m.ctx.CurrentView == context.UserView {
-		contentHeight -= lipgloss.Height(m.search.View())
+// star stars id, or removes the star when starred is true.
+func star(c Client, id string, starred bool) tea.Cmd {
+	return func() tea.Msg {
+		do := c.Star
+		if starred {
+			do = c.Unstar
+		}
+		s, err := do(context.Background(), id)
+		return commands.StarResponse{Unstar: starred, Starrable: s, Err: err}
 	}
-
-	m.ctx.Layout.ContentHeight = contentHeight
-	m.syncProgramContext()
-}
-
-func (m *Model) resetWidgets() {
-	m.ctx.FocusableWidgets = []context.FocusableWidget{
-		{
-			Descriptor: "NoFocus",
-		},
-	}
-}
-
-func (m *Model) resetCurrentFocus() {
-	m.ctx.CurrentFocus = context.CurrentFocus{
-		FocusIdx: 0,
-		FocusedWidget: context.FocusableWidget{
-			Descriptor: "NoFocus",
-			Type:       context.NoWidget,
-		},
-	}
-}
-
-func (m *Model) syncProgramContext() {
-	m.markdown.UpdateProgramContext(&m.ctx)
-	m.search.UpdateProgramContext(&m.ctx)
-	m.user.UpdateProgramContext(&m.ctx)
-	m.help.UpdateProgramContext(&m.ctx)
-	m.message.UpdateProgramContext(&m.ctx)
 }

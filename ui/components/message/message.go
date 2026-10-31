@@ -8,20 +8,21 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/jrnxf/gh-eco/ui/commands"
-	"github.com/jrnxf/gh-eco/ui/context"
-	"github.com/jrnxf/gh-eco/utils"
+	"github.com/jrnxf/gh-eco/ui/keys"
+	"github.com/jrnxf/gh-eco/ui/state"
 )
 
 type Model struct {
-	keys    utils.KeyMap
+	keys    keys.KeyMap
 	Content string
 	timer   timer.Model
-	ctx     *context.ProgramContext
+	state   *state.State
 }
 
-func NewModel() Model {
+func NewModel(s *state.State) Model {
 	return Model{
-		keys: utils.Keys,
+		keys:  keys.Keys,
+		state: s,
 	}
 }
 
@@ -34,10 +35,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case commands.SetMessage:
-		if m.ctx.CurrentView != context.MessageView {
-			m.ctx.LastView = m.ctx.CurrentView
+		if m.state.CurrentView != state.MessageView {
+			m.state.LastView = m.state.CurrentView
 		}
-		m.ctx.CurrentView = context.MessageView
+		m.state.CurrentView = state.MessageView
 		m.Content = msg.Content
 		m.timer = timer.NewWithInterval(time.Second*time.Duration(msg.SecondsDisplayed), time.Second)
 		cmd = m.timer.Init()
@@ -53,8 +54,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, cmd
 
 	case timer.TimeoutMsg:
-		m.ctx.CurrentView = m.ctx.LastView
-		m.ctx.LastView = context.VoidView
+		m.state.CurrentView = m.state.LastView
+		m.state.LastView = state.VoidView
 		m.Content = ""
 	}
 
@@ -64,18 +65,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 func (m Model) View() string {
 
-	text := lipgloss.NewStyle().Width(m.ctx.Layout.ScreenWidth).PaddingTop(m.ctx.Layout.ScreenHeight / 2).Align(lipgloss.Center).Render(
+	text := lipgloss.NewStyle().Width(m.state.Layout.ScreenWidth).PaddingTop(m.state.Layout.ScreenHeight / 2).Align(lipgloss.Center).Render(
 		// fmt.Sprintf("%s %s", m.Content, m.timer.View()),
 		m.Content,
 	)
 	return text
-}
-
-func (m *Model) UpdateProgramContext(ctx *context.ProgramContext) {
-	if ctx == nil {
-		return
-	}
-	m.ctx = ctx
 }
 
 func (m Model) TriggerMessage(content string, secondsDisplayed int) tea.Cmd {
