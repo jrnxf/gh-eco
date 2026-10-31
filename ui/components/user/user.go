@@ -2,136 +2,174 @@ package user
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/jrnxf/gh-eco/models"
 	"github.com/jrnxf/gh-eco/ui/commands"
 	"github.com/jrnxf/gh-eco/ui/components/graph"
 	"github.com/jrnxf/gh-eco/ui/components/repo"
 	"github.com/jrnxf/gh-eco/ui/state"
 	"github.com/jrnxf/gh-eco/ui/styles"
-	"github.com/jrnxf/gh-eco/utils"
-	"golang.org/x/term"
 )
 
+// rightSlack keeps every line this many cells short of the screen edge.
+// Some emoji draw wider than lipgloss measures them; a line that reached the
+// last column would then wrap and shift the whole frame down.
+const rightSlack = 2
+
+// wheelLines is how far one mouse wheel step scrolls.
+const wheelLines = 3
+
 type Model struct {
-	display string
-	err     error
-	state   *state.State
+	lines []string
+	// offset is the first visible line.
+	offset int
+	// focus is the focus the scroll position was last fitted to.
+	focus int
+	err   error
+	state *state.State
 }
 
 func NewModel(s *state.State) Model {
-	return Model{state: s}
+	return Model{state: s, focus: -1}
 }
 
 // Update rebuilds the display after every message, since the root model may
 // have changed the user, the focus or the layout.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
-	if msg, ok := msg.(commands.GetUserResponse); ok {
+	switch msg := msg.(type) {
+	case commands.GetUserResponse:
 		m.err = msg.Err
+		m.offset = 0
+	case tea.MouseMsg:
+		if msg.Action == tea.MouseActionPress {
+			switch msg.Button {
+			case tea.MouseButtonWheelUp:
+				m.offset -= wheelLines
+			case tea.MouseButtonWheelDown:
+				m.offset += wheelLines
+			}
+		}
 	}
-	m.buildDisplay()
+	m.build()
 	return m, nil
 }
 
-func (m Model) buildUserDisplay() string {
+func (m *Model) build() {
+	width := max(0, m.state.Layout.ContentWidth-rightSlack)
 	u := m.state.User
-	focused := m.state.Focused().Kind == state.UserTarget
 
-	var b strings.Builder
-	w := b.WriteString
+	var blocks []string
+	switch {
+	case m.err != nil:
+		blocks = append(blocks, "no results")
+	case u.Login != "":
+		blocks = append(blocks, m.header(width)...)
+		blocks = append(blocks,
+			"",
+			fmt.Sprintf("%v contributions", u.ActivityGraph.ContributionsCount),
+			graph.BuildGraphDisplay(fitWeeks(u.ActivityGraph.Weeks, width)),
+			"",
+		)
+	}
+
+	var lines []string
+	for _, b := range blocks {
+		lines = append(lines, centerBlock(b, width)...)
+	}
+
+	focusTop, focusBottom := 0, 0
+	if u.Login != "" && m.err == nil {
+		focused := -1
+		if t := m.state.Focused(); t.Kind == state.RepoTarget {
+			focused = t.Repo
+		}
+		grid, top, bottom := repo.Grid(u.PinnedRepos, focused, width)
+		if top >= 0 {
+			focusTop, focusBottom = len(lines)+top, len(lines)+bottom
+		}
+		lines = append(lines, centerBlock(grid, width)...)
+	}
+	m.lines = lines
+
+	if m.focus != m.state.Focus {
+		// scroll just enough to show the newly focused element
+		m.focus = m.state.Focus
+		height := m.state.Layout.ContentHeight
+		if focusTop < m.offset {
+			m.offset = focusTop
+		} else if focusBottom >= m.offset+height {
+			m.offset = focusBottom - height + 1
+		}
+	}
+	m.offset = max(0, min(m.offset, len(m.lines)-m.state.Layout.ContentHeight))
+}
+
+// header is the name, bio, follower counts and links, one block each.
+func (m Model) header(width int) []string {
+	u := m.state.User
 
 	name := u.Name
 	if name == "" {
 		// user hasn't specified their name on github
 		name = u.Login
 	}
-	if focused {
-		w(styles.FocusedBold.Render(name))
-	} else {
-		w(styles.Bold.Render(name))
+	nameStyle := styles.Bold
+	if m.state.Focused().Kind == state.UserTarget {
+		nameStyle = styles.FocusedBold
 	}
-	w(utils.GetNewLines(2))
+	blocks := []string{nameStyle.Render(ansi.Truncate(name, width, "...")), ""}
 
 	if u.Bio != "" {
-		w(lipgloss.NewStyle().Faint(true).Align(lipgloss.Center).Render(u.Bio))
-		w(utils.GetNewLines(2))
+		bio := lipgloss.NewStyle().
+			Faint(true).
+			Align(lipgloss.Center).
+			Width(min(width, lipgloss.Width(u.Bio))).
+			Render(u.Bio)
+		blocks = append(blocks, bio, "")
 	}
 
-	var (
-		viewerIsFollowingStr string
-		isFollowingViewerStr string
-	)
-
+	follow := fmt.Sprintf("%v followers", u.FollowersCount)
 	if u.ViewerIsFollowing {
-		viewerIsFollowingStr = lipgloss.NewStyle().Italic(true).Render(" (you follow)")
+		follow += lipgloss.NewStyle().Italic(true).Render(" (you follow)")
 	}
-
+	follow += fmt.Sprintf(" / %v following", u.FollowingCount)
 	if u.IsFollowingViewer {
-		isFollowingViewerStr = lipgloss.NewStyle().Italic(true).Render(" (follows you)")
+		follow += lipgloss.NewStyle().Italic(true).Render(" (follows you)")
 	}
+	blocks = append(blocks, ansi.Truncate(follow, width, "..."))
 
-	w(fmt.Sprintf("%v %s%s / %v %s%s", u.FollowersCount, "followers", viewerIsFollowingStr, u.FollowingCount, "following", isFollowingViewerStr))
-	w(utils.GetNewLines(1))
-
-	if (u.Location != "") || (u.WebsiteUrl != "") || (u.TwitterUsername != "") {
-		line := []string{}
-		if u.Location != "" {
-			line = append(line, u.Location)
-		}
-		if u.WebsiteUrl != "" {
-			line = append(line, u.WebsiteUrl)
-		}
-		if u.TwitterUsername != "" {
-			line = append(line, fmt.Sprintf("@%s", u.TwitterUsername))
-		}
-
-		w(utils.GetNewLines(1))
-		w(strings.Join(line, "  /  "))
-		w(utils.GetNewLines(1))
+	var links []string
+	if u.Location != "" {
+		links = append(links, u.Location)
 	}
-
-	return b.String()
+	if u.WebsiteUrl != "" {
+		links = append(links, u.WebsiteUrl)
+	}
+	if u.TwitterUsername != "" {
+		links = append(links, "@"+u.TwitterUsername)
+	}
+	if len(links) > 0 {
+		blocks = append(blocks, "", ansi.Truncate(strings.Join(links, "  /  "), width, "..."))
+	}
+	return blocks
 }
 
-func (m *Model) buildDisplay() {
-	physicalWidth, _, _ := term.GetSize(int(os.Stdout.Fd()))
-
-	var b strings.Builder
-	w := b.WriteString
-
-	u := m.state.User
-	if m.err != nil {
-		w("no results")
-	} else if u.Login != "" {
-		w(m.buildUserDisplay())
-
-		w(utils.GetNewLines(2))
-
-		w(fmt.Sprintf("%v contributions", u.ActivityGraph.ContributionsCount))
-
-		w(utils.GetNewLines(1))
-
-		w(lipgloss.NewStyle().
-			Align(lipgloss.Left).
-			Render(graph.BuildGraphDisplay(fitWeeks(u.ActivityGraph.Weeks, physicalWidth))))
-
-		w(utils.GetNewLines(2))
-
-		focusedRepo := -1
-		if t := m.state.Focused(); t.Kind == state.RepoTarget {
-			focusedRepo = t.Repo
+// centerBlock indents every line of block by the same amount so the block
+// sits centered in width. Unlike lipgloss alignment it adds no trailing
+// padding, so no line runs to the screen edge.
+func centerBlock(block string, width int) []string {
+	lines := strings.Split(strings.TrimRight(block, "\n"), "\n")
+	pad := strings.Repeat(" ", max(0, (width-lipgloss.Width(block))/2))
+	for i, l := range lines {
+		if l != "" {
+			lines[i] = pad + l
 		}
-		w(lipgloss.NewStyle().
-			Align(lipgloss.Center).Render(repo.BuildPinnedRepoDisplay(u.PinnedRepos, focusedRepo)))
 	}
-
-	m.display = lipgloss.NewStyle().
-		Align(lipgloss.Center).
-		Width(physicalWidth).Render(b.String())
+	return lines
 }
 
 // fitWeeks keeps the most recent weeks that fit in width, since each week
@@ -143,6 +181,12 @@ func fitWeeks(weeks []models.WeeklyContribution, width int) []models.WeeklyContr
 	return weeks
 }
 
+// View shows the visible slice of the display, exactly ContentHeight lines.
 func (m Model) View() string {
-	return lipgloss.NewStyle().Height(m.state.Layout.ContentHeight).Render(m.display)
+	height := m.state.Layout.ContentHeight
+	visible := make([]string, height)
+	if m.offset < len(m.lines) {
+		copy(visible, m.lines[m.offset:])
+	}
+	return strings.Join(visible, "\n")
 }

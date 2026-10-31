@@ -20,24 +20,8 @@ type GetUserQuery struct {
 			TotalCount int
 		}
 		PinnedItems struct {
-			Nodes []struct {
-				Repository struct {
-					Id               string
-					Name             string
-					Description      string
-					StargazerCount   int
-					ViewerHasStarred bool
-					Url              string
-					Owner            struct {
-						Login string
-					}
-					PrimaryLanguage struct {
-						Name  string
-						Color string
-					}
-				} `graphql:"... on Repository"`
-			}
-		} `graphql:"pinnedItems(first: $first)"`
+			Nodes []PinnedItem
+		} `graphql:"pinnedItems(first: $first, types: [REPOSITORY])"`
 		ContributionsCollection struct {
 			ContributionCalendar struct {
 				TotalContributions int
@@ -49,4 +33,23 @@ type GetUserQuery struct {
 			}
 		}
 	} `graphql:"user(login: $login)"`
+}
+
+// PinnedItem is one pinned item; only repositories are queried.
+type PinnedItem struct {
+	Repository struct {
+		Id               string
+		Name             string
+		Description      string
+		StargazerCount   int
+		ViewerHasStarred bool
+		Url              string
+		Owner            struct {
+			Login string
+		}
+		PrimaryLanguage struct {
+			Name  string
+			Color string
+		}
+	} `graphql:"... on Repository"`
 }

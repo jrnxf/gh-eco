@@ -110,11 +110,8 @@ this please feel free to open an issue / pull request and start the discussion!
 
 ## Limitations
 
-- Misalignment can occur when emojis are present. Since emoji widths vary, I don't believe there is
-  any way to deal with this. Definitely reach out if you have any ideas.
-
-- Smaller terminal screens will almost definitely cause rendering issues. For `gh-eco` to work
-  properly make sure to give your terminal as much screen real estate as possible!
+- Some emoji are drawn at different widths by different terminals, so a card border next to one
+  can sit a cell or two off.
 
 ## Contributing
 

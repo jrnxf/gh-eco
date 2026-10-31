@@ -29,6 +29,10 @@ func mapUser(query queries.GetUserQuery) models.User {
 
 	for _, node := range qu.PinnedItems.Nodes {
 		r := node.Repository
+		if r.Id == "" {
+			// a pinned gist: only the Repository fragment is queried
+			continue
+		}
 		u.PinnedRepos = append(u.PinnedRepos, models.Repo{
 			Id:               r.Id,
 			Name:             r.Name,
