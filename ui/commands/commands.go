@@ -23,6 +23,8 @@ type GetUserResponse struct {
 }
 
 type GetReadmeResponse struct {
+	// Req identifies the request; responses to superseded requests are dropped.
+	Req    int
 	Readme string
 	Err    error
 }

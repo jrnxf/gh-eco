@@ -43,6 +43,8 @@ type Model struct {
 	message  message.Model
 	// userReq identifies the latest user lookup.
 	userReq int
+	// readmeReq identifies the latest readme request.
+	readmeReq int
 }
 
 func New(client Client) Model {
@@ -78,6 +80,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case commands.SearchSubmitted:
 		m.userReq++
+		m.readmeReq++
 		cmds = append(cmds, fetchUser(m.client, msg.Login, m.userReq))
 
 	case commands.GetUserResponse:
@@ -90,6 +93,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		s.Focus = 0
 
 	case commands.GetReadmeResponse:
+		if msg.Req != m.readmeReq || s.Mode != state.NormalMode || s.CurrentView != state.UserView {
+			// the user moved on before the readme arrived
+			return m, nil
+		}
 		if msg.Err != nil {
 			cmds = append(cmds, message.Show("couldn't load readme 😕", 2))
 		} else {
@@ -164,10 +171,12 @@ func (m *Model) handleNormalKey(msg tea.KeyMsg) tea.Cmd {
 		case state.UserView:
 			switch target.Kind {
 			case state.UserTarget:
-				return fetchProfileReadme(m.client, s.User)
+				m.readmeReq++
+				return fetchProfileReadme(m.client, s.User, m.readmeReq)
 			case state.RepoTarget:
 				r := s.FocusedRepo()
-				return fetchReadme(m.client, r.Owner.Login, r.Name)
+				m.readmeReq++
+				return fetchReadme(m.client, r.Owner.Login, r.Name, m.readmeReq)
 			}
 		case state.ReadmeView:
 			s.CurrentView = state.UserView
@@ -218,22 +227,22 @@ func fetchUser(c Client, login string, req int) tea.Cmd {
 	}
 }
 
-func fetchReadme(c Client, owner, name string) tea.Cmd {
+func fetchReadme(c Client, owner, name string, req int) tea.Cmd {
 	return func() tea.Msg {
 		text, err := c.Readme(context.Background(), owner, name)
-		return commands.GetReadmeResponse{Readme: text, Err: err}
+		return commands.GetReadmeResponse{Req: req, Readme: text, Err: err}
 	}
 }
 
 // fetchProfileReadme fetches the readme shown on a profile: a user's lives
 // in the repo named after them, an organization's in its .github repo.
-func fetchProfileReadme(c Client, u models.User) tea.Cmd {
+func fetchProfileReadme(c Client, u models.User, req int) tea.Cmd {
 	if !u.IsOrganization {
-		return fetchReadme(c, u.Login, u.Login)
+		return fetchReadme(c, u.Login, u.Login, req)
 	}
 	return func() tea.Msg {
 		text, err := c.OrgReadme(context.Background(), u.Login)
-		return commands.GetReadmeResponse{Readme: text, Err: err}
+		return commands.GetReadmeResponse{Req: req, Readme: text, Err: err}
 	}
 }
 

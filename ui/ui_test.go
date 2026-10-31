@@ -244,6 +244,77 @@ func Test_ReadmeToggle(t *testing.T) {
 	}
 }
 
+func Test_StaleReadmeIsDropped(t *testing.T) {
+	newClient := func() *fakeClient {
+		return &fakeClient{
+			users: map[string]models.User{"octocat": octocat(), "bob": {Login: "bob"}},
+			readmes: map[string]string{
+				"octocat/alpha": "# alpha readme",
+				"octocat/beta":  "# beta readme",
+			},
+		}
+	}
+	// focusAlpha loads octocat and focuses alpha.
+	focusAlpha := func(t *testing.T, client *fakeClient) Model {
+		m := newModel(t, client)
+		m, res := lookup(t, m, "octocat")
+		m, _ = send(m, res)
+		m, _ = send(m, keyRunes("j")) // user
+		m, _ = send(m, keyRunes("j")) // alpha
+		return m
+	}
+
+	t.Run("typing a new search", func(t *testing.T) {
+		m := focusAlpha(t, newClient())
+		m, msgs := send(m, keyRunes("r"))
+		readme := find[commands.GetReadmeResponse](t, msgs)
+
+		m, _ = send(m, keyRunes("/"))
+		m, _ = send(m, keyRunes("bo"))
+		m, _ = send(m, readme)
+
+		if m.state.CurrentView != state.UserView || m.state.Mode != state.InsertMode {
+			t.Fatalf("view = %v, mode = %v, want the search box still typing", m.state.CurrentView, m.state.Mode)
+		}
+		if !strings.Contains(m.View(), "bo") {
+			t.Errorf("search box is hidden:\n%s", m.View())
+		}
+	})
+
+	t.Run("after a new search lands", func(t *testing.T) {
+		m := focusAlpha(t, newClient())
+		m, msgs := send(m, keyRunes("r"))
+		readme := find[commands.GetReadmeResponse](t, msgs)
+
+		m, _ = send(m, keyRunes("/"))
+		m, res := lookup(t, m, "bob")
+		m, _ = send(m, res)
+		m, _ = send(m, readme)
+
+		if m.state.CurrentView != state.UserView || m.state.User.Login != "bob" {
+			t.Errorf("octocat's readme opened over bob: view = %v", m.state.CurrentView)
+		}
+	})
+
+	t.Run("superseded by a newer readme", func(t *testing.T) {
+		m := focusAlpha(t, newClient())
+		m, msgs := send(m, keyRunes("r"))
+		alpha := find[commands.GetReadmeResponse](t, msgs)
+		m, _ = send(m, keyRunes("j")) // beta
+		m, msgs = send(m, keyRunes("r"))
+		beta := find[commands.GetReadmeResponse](t, msgs)
+
+		m, _ = send(m, alpha) // the older request lands first
+		if m.state.CurrentView != state.UserView {
+			t.Fatalf("alpha's readme opened after r on beta")
+		}
+		m, _ = send(m, beta)
+		if m.state.CurrentView != state.ReadmeView || !strings.Contains(m.View(), "beta readme") {
+			t.Errorf("beta's readme did not open:\n%s", m.View())
+		}
+	})
+}
+
 func Test_FailedSearchClearsPreviousUser(t *testing.T) {
 	client := &fakeClient{users: map[string]models.User{"octocat": octocat()}}
 	m := newModel(t, client)
