@@ -111,3 +111,25 @@ func Test_FrameFitsScreen(t *testing.T) {
 		})
 	}
 }
+
+func Test_ResizeKeepsFocusedCardVisible(t *testing.T) {
+	client := &fakeClient{users: map[string]models.User{"octocat": busyUser()}}
+	m, _ := send(New(client), tea.WindowSizeMsg{Width: 160, Height: 50})
+	m, res := lookup(t, m, "octocat")
+	m, _ = send(m, res)
+	for range len(busyUser().PinnedRepos) + 1 {
+		m, _ = send(m, keyRunes("j"))
+	}
+	if r := m.state.FocusedRepo(); r == nil || r.Name != "repo-5" {
+		t.Fatalf("focused repo = %+v, want repo-5", r)
+	}
+
+	for _, size := range [][2]int{{120, 30}, {50, 18}, {36, 14}, {160, 50}} {
+		width, height := size[0], size[1]
+		m, _ = send(m, tea.WindowSizeMsg{Width: width, Height: height})
+		checkFrame(t, m.View(), width, height, 2)
+		if !strings.Contains(m.View(), "repo-5") {
+			t.Errorf("%dx%d: focused repo-5 is not on screen", width, height)
+		}
+	}
+}

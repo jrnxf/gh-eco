@@ -34,8 +34,10 @@ type Model struct {
 	login string
 	// offset is the first visible line.
 	offset int
-	// focus is the focus the scroll position was last fitted to.
+	// focus and size are the focus and content size the scroll position
+	// was last fitted to.
 	focus int
+	size  [2]int
 	err   error
 	state *state.State
 }
@@ -108,9 +110,10 @@ func (m *Model) build() {
 	}
 	m.lines = lines
 
-	if m.focus != m.state.Focus {
-		// scroll just enough to show the newly focused element
-		m.focus = m.state.Focus
+	size := [2]int{m.state.Layout.ContentWidth, m.state.Layout.ContentHeight}
+	if m.focus != m.state.Focus || m.size != size {
+		// scroll just enough to show the focused element
+		m.focus, m.size = m.state.Focus, size
 		height := m.state.Layout.ContentHeight
 		if focusTop < m.offset {
 			m.offset = focusTop
