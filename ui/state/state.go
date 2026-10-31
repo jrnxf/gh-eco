@@ -15,10 +15,8 @@ const (
 type View int
 
 const (
-	VoidView View = iota
-	UserView
+	UserView View = iota
 	ReadmeView
-	MessageView
 )
 
 type TargetKind int
@@ -39,7 +37,6 @@ type Target struct {
 type State struct {
 	User        models.User
 	CurrentView View
-	LastView    View
 	Mode        Mode
 	// Focus indexes Targets().
 	Focus  int

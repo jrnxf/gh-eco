@@ -30,7 +30,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	p := tea.NewProgram(ui.New(client), tea.WithAltScreen(), tea.WithMouseAllMotion())
+	p := tea.NewProgram(ui.New(client), tea.WithAltScreen(), tea.WithMouseCellMotion())
 
 	if _, err := p.Run(); err != nil {
 		log.Fatal(err)

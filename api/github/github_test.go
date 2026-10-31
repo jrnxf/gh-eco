@@ -2,6 +2,7 @@ package github
 
 import (
 	"encoding/base64"
+	"strings"
 	"testing"
 )
 
@@ -73,16 +74,7 @@ func Test_DecodeReadmeContent_WrongEncodingMentionsEncoding(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected an error for non-base64 encoding")
 	}
-	if got := err.Error(); !contains(got, "utf-8") {
+	if got := err.Error(); !strings.Contains(got, "utf-8") {
 		t.Errorf("error %q does not mention the encoding", got)
 	}
-}
-
-func contains(s, substr string) bool {
-	for i := 0; i+len(substr) <= len(s); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }

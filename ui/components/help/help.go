@@ -18,7 +18,7 @@ type Model struct {
 func NewModel(s *state.State) Model {
 	return Model{
 		keys:  keys.Keys,
-		help:  baseHelp.NewModel(),
+		help:  baseHelp.New(),
 		state: s,
 	}
 }

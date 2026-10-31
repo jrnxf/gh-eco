@@ -3,7 +3,6 @@ package models
 // User is a GitHub user or, when IsOrganization is set, an organization.
 type User struct {
 	IsOrganization    bool
-	Id                string
 	Login             string
 	Name              string
 	Location          string
@@ -39,15 +38,10 @@ type Repo struct {
 	Owner            struct {
 		Login string
 	}
-	Readme          Blob
 	PrimaryLanguage struct {
 		Name  string
 		Color string
 	}
-}
-
-type Blob struct {
-	Text string
 }
 
 type Starrable struct {

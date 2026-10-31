@@ -8,7 +8,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/jrnxf/gh-eco/models"
 	"github.com/jrnxf/gh-eco/ui/styles"
-	"github.com/jrnxf/gh-eco/utils"
 )
 
 // maxDescription is how many characters of a description a card shows
@@ -80,7 +79,7 @@ func card(r models.Repo, width int, focused bool) string {
 }
 
 func description(r models.Repo) string {
-	return utils.TruncateText(r.Description, maxDescription)
+	return truncateText(r.Description, maxDescription)
 }
 
 // stats is the language and star count line; repos without a detected

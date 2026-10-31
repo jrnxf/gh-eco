@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"sync"
@@ -113,17 +114,25 @@ func drain(cmd tea.Cmd) []tea.Msg {
 	}
 }
 
-// find returns the first message of type T.
-func find[T tea.Msg](t *testing.T, msgs []tea.Msg) T {
-	t.Helper()
+// firstOf returns the first message of type T, if any.
+func firstOf[T tea.Msg](msgs []tea.Msg) (T, bool) {
 	for _, msg := range msgs {
 		if m, ok := msg.(T); ok {
-			return m
+			return m, true
 		}
 	}
 	var zero T
-	t.Fatalf("no %T among %d messages", zero, len(msgs))
-	return zero
+	return zero, false
+}
+
+// find returns the first message of type T.
+func find[T tea.Msg](t *testing.T, msgs []tea.Msg) T {
+	t.Helper()
+	m, ok := firstOf[T](msgs)
+	if !ok {
+		t.Fatalf("no %T among %d messages", m, len(msgs))
+	}
+	return m
 }
 
 // send feeds msg to m and returns the updated model and the messages its
@@ -294,5 +303,55 @@ func Test_OrganizationProfile(t *testing.T) {
 	m, _ = send(m, find[commands.GetReadmeResponse](t, msgs))
 	if !client.called("org readme acme") || m.state.CurrentView != state.ReadmeView {
 		t.Errorf("r on an organization must open its profile readme: calls %v", client.calls)
+	}
+}
+
+func Test_NoticeKeepsTheView(t *testing.T) {
+	client := &fakeClient{
+		users:   map[string]models.User{"octocat": octocat()},
+		readmes: map[string]string{"octocat/alpha": "# alpha readme"},
+	}
+	m := newModel(t, client)
+	m, res := lookup(t, m, "octocat")
+	m, _ = send(m, res)
+	m, _ = send(m, keyRunes("j"))
+	m, _ = send(m, keyRunes("j")) // alpha
+	m, msgs := send(m, keyRunes("r"))
+	m, _ = send(m, find[commands.GetReadmeResponse](t, msgs))
+
+	// a failed star shows a notice over the help bar, not instead of the page
+	m, msgs = send(m, commands.StarResponse{Err: errors.New("boom")})
+	m, _ = send(m, find[commands.SetMessage](t, msgs))
+	lines := strings.Split(m.View(), "\n")
+	if len(lines) != 50 || !strings.Contains(lines[49], "star failed") {
+		t.Fatalf("notice is not on the bottom row of a full frame: %d lines, bottom %q", len(lines), lines[len(lines)-1])
+	}
+	if m.state.CurrentView != state.ReadmeView || !strings.Contains(m.View(), "alpha readme") {
+		t.Errorf("the readme is hidden while the notice shows")
+	}
+
+	// keys keep working while it shows
+	m, _ = send(m, keyRunes("r"))
+	if m.state.CurrentView != state.UserView {
+		t.Errorf("r was swallowed by the notice")
+	}
+}
+
+func Test_ThanksOnlyAfterStarringGhEco(t *testing.T) {
+	m := newModel(t, &fakeClient{})
+	m.state.Mode = state.NormalMode // ! works once the search box is left
+
+	m, msgs := send(m, keyRunes("!"))
+	if _, ok := firstOf[commands.SetMessage](msgs); ok {
+		t.Errorf("thanked before the star request returned")
+	}
+	_, msgs = send(m, find[commands.StarResponse](t, msgs))
+	if msg := find[commands.SetMessage](t, msgs); !strings.Contains(msg.Content, "tysm") {
+		t.Errorf("notice after starring gh-eco = %q", msg.Content)
+	}
+
+	_, msgs = send(m, commands.StarResponse{Err: errors.New("boom")})
+	if msg := find[commands.SetMessage](t, msgs); strings.Contains(msg.Content, "tysm") {
+		t.Errorf("thanked for a star that failed")
 	}
 }

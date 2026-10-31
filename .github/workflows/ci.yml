@@ -26,5 +26,8 @@ jobs:
       - name: fmt
         run: test -z "$(gofmt -l .)"
 
+      - name: staticcheck
+        run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
+
       - name: test
         run: go test -v ./...

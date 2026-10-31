@@ -5,7 +5,6 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/jrnxf/gh-eco/models"
-	"github.com/jrnxf/gh-eco/utils"
 )
 
 var (
@@ -26,7 +25,7 @@ func BuildGraphDisplay(weeklyContributions []models.WeeklyContribution) string {
 	// unfilled cells stay "" and render as blanks
 	maxDays := 0
 	for _, week := range weeklyContributions {
-		maxDays = utils.MaxInt(maxDays, len(week.ContributionDays))
+		maxDays = max(maxDays, len(week.ContributionDays))
 	}
 	if maxDays == 0 {
 		return ""
@@ -87,7 +86,7 @@ func generateContributionGraph(slice [][]string) string {
 			}
 		}
 
-		w(utils.GetNewLines(1))
+		w("\n")
 	}
 
 	return b.String()

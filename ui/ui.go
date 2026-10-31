@@ -2,11 +2,14 @@ package ui
 
 import (
 	"context"
+	"io"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	cliBrowser "github.com/cli/browser"
+	"github.com/cli/go-gh/v2/pkg/browser"
 
 	"github.com/jrnxf/gh-eco/api/github"
 	"github.com/jrnxf/gh-eco/models"
@@ -18,7 +21,6 @@ import (
 	"github.com/jrnxf/gh-eco/ui/components/user"
 	"github.com/jrnxf/gh-eco/ui/keys"
 	"github.com/jrnxf/gh-eco/ui/state"
-	"github.com/jrnxf/gh-eco/utils"
 )
 
 // Client is the GitHub API the UI depends on.
@@ -44,11 +46,7 @@ type Model struct {
 }
 
 func New(client Client) Model {
-	s := &state.State{
-		Mode:        state.InsertMode,
-		CurrentView: state.UserView,
-		LastView:    state.VoidView,
-	}
+	s := &state.State{Mode: state.InsertMode, CurrentView: state.UserView}
 	return Model{
 		client:   client,
 		state:    s,
@@ -74,7 +72,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if key.Matches(msg, m.keys.Quit) {
 			return m, tea.Quit
 		}
-		if s.Mode == state.NormalMode && s.CurrentView != state.MessageView {
+		if s.Mode == state.NormalMode {
 			cmds = append(cmds, m.handleNormalKey(msg))
 		}
 
@@ -93,7 +91,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case commands.GetReadmeResponse:
 		if msg.Err != nil {
-			cmds = append(cmds, m.message.TriggerMessage("couldn't load readme 😕", 2))
+			cmds = append(cmds, message.Show("couldn't load readme 😕", 2))
 		} else {
 			s.CurrentView = state.ReadmeView
 		}
@@ -104,8 +102,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.Unstar {
 				text = "unstar failed 😕"
 			}
-			cmds = append(cmds, m.message.TriggerMessage(text, 2))
+			cmds = append(cmds, message.Show(text, 2))
 			break
+		}
+		if msg.Starrable.Id == github.GhEcoRepoID && !msg.Unstar {
+			cmds = append(cmds, message.Show("tysm 🥹", 2))
 		}
 		for i := range s.User.PinnedRepos {
 			r := &s.User.PinnedRepos[i]
@@ -145,9 +146,9 @@ func (m *Model) handleNormalKey(msg tea.KeyMsg) tea.Cmd {
 	case key.Matches(msg, m.keys.OpenGithub):
 		switch target.Kind {
 		case state.UserTarget:
-			utils.BrowserOpen(s.User.Url)
+			return openURL(s.User.Url)
 		case state.RepoTarget:
-			utils.BrowserOpen(s.FocusedRepo().Url)
+			return openURL(s.FocusedRepo().Url)
 		}
 
 	case key.Matches(msg, m.keys.StarRepo):
@@ -156,10 +157,7 @@ func (m *Model) handleNormalKey(msg tea.KeyMsg) tea.Cmd {
 		}
 
 	case key.Matches(msg, m.keys.StarGhEco):
-		return tea.Batch(
-			m.message.TriggerMessage("tysm 🥹", 2),
-			star(m.client, github.GhEcoRepoID, false),
-		)
+		return star(m.client, github.GhEcoRepoID, false)
 
 	case key.Matches(msg, m.keys.ToggleReadme):
 		switch s.CurrentView {
@@ -201,27 +199,16 @@ func (m *Model) layout() {
 }
 
 func (m Model) View() string {
+	// a notice takes the help bar's row for a moment
+	bottom := m.help.View()
 	if m.message.Content != "" {
-		return m.message.View()
+		bottom = m.message.View()
 	}
 
-	switch m.state.CurrentView {
-	case state.ReadmeView:
-		return lipgloss.JoinVertical(lipgloss.Left,
-			m.markdown.View(),
-			m.help.View(),
-		)
-
-	case state.UserView:
-		return lipgloss.JoinVertical(lipgloss.Left,
-			m.search.View(),
-			m.user.View(),
-			m.help.View(),
-		)
-
-	default:
-		return ""
+	if m.state.CurrentView == state.ReadmeView {
+		return lipgloss.JoinVertical(lipgloss.Left, m.markdown.View(), bottom)
 	}
+	return lipgloss.JoinVertical(lipgloss.Left, m.search.View(), m.user.View(), bottom)
 }
 
 func fetchUser(c Client, login string, req int) tea.Cmd {
@@ -259,5 +246,20 @@ func star(c Client, id string, starred bool) tea.Cmd {
 		}
 		s, err := do(context.Background(), id)
 		return commands.StarResponse{Unstar: starred, Starrable: s, Err: err}
+	}
+}
+
+func init() {
+	// the default launcher would write into the terminal the UI owns
+	cliBrowser.Stdout, cliBrowser.Stderr = io.Discard, io.Discard
+}
+
+// openURL opens url with the browser gh is configured to use.
+func openURL(url string) tea.Cmd {
+	return func() tea.Msg {
+		if err := browser.New("", io.Discard, io.Discard).Browse(url); err != nil {
+			return commands.SetMessage{Content: "couldn't open the browser 😕", SecondsDisplayed: 2}
+		}
+		return nil
 	}
 }

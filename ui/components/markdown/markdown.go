@@ -8,7 +8,6 @@ import (
 	"github.com/jrnxf/gh-eco/ui/commands"
 	"github.com/jrnxf/gh-eco/ui/state"
 	"github.com/jrnxf/gh-eco/ui/styles"
-	"github.com/jrnxf/gh-eco/utils"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -102,12 +101,12 @@ func (m *Model) fitViewport() {
 }
 
 func (m Model) View() string {
-	return fmt.Sprintf("%s%s%s", m.Viewport.View(), utils.GetNewLines(1), m.footerView())
+	return m.Viewport.View() + "\n" + m.footerView()
 }
 
 func (m Model) footerView() string {
 	scrollPercentage := fmt.Sprintf(" %.f%%", m.Viewport.ScrollPercent()*100)
-	line := strings.Repeat("─", utils.MaxInt(0, m.Viewport.Width-lipgloss.Width(scrollPercentage)))
+	line := strings.Repeat("─", max(0, m.Viewport.Width-lipgloss.Width(scrollPercentage)))
 
 	return styles.FaintBold.Render(lipgloss.JoinHorizontal(lipgloss.Center, line, scrollPercentage))
 }
