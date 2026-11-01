@@ -2,6 +2,7 @@
 package text
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -25,4 +26,16 @@ func Ellipsize(s string, width int) string {
 		cut = ansi.Truncate(s, lipgloss.Width(strings.TrimRight(visible, " ")), "")
 	}
 	return cut + Ellipsis
+}
+
+// Count formats n with thousands separators, as GitHub does.
+func Count(n int) string {
+	if n < 0 {
+		return "-" + Count(-n)
+	}
+	s := strconv.Itoa(n)
+	for i := len(s) - 3; i > 0; i -= 3 {
+		s = s[:i] + "," + s[i:]
+	}
+	return s
 }

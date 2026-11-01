@@ -1,5 +1,5 @@
-// Package loading shows a spinner in the bottom row while a request is out
-// on the network.
+// Package loading animates the spinner shown where a request's answer will
+// appear, while the request is out on the network.
 package loading
 
 import (
@@ -8,15 +8,14 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/jrnxf/gh-eco/ui/styles"
 )
 
 type Model struct {
 	spinner spinner.Model
-	// labels names the pending requests, oldest first; the newest shows.
-	labels []string
+	// pending names the requests out on the network.
+	pending []string
 }
 
 func New() Model {
@@ -28,12 +27,12 @@ func New() Model {
 	}
 }
 
-// Start shows the spinner for a request labelled label, on top of any
-// other pending request.
-func (m *Model) Start(label string) tea.Cmd {
+// Start marks the request named name as pending, starting the spinner if
+// nothing else was.
+func (m *Model) Start(name string) tea.Cmd {
 	wasIdle := !m.Visible()
-	m.Stop(label)
-	m.labels = append(m.labels, label)
+	m.Stop(name)
+	m.pending = append(m.pending, name)
 	if wasIdle {
 		return m.spinner.Tick
 	}
@@ -41,15 +40,20 @@ func (m *Model) Start(label string) tea.Cmd {
 	return nil
 }
 
-// Stop drops the request labelled label; the spinner keeps going while
+// Stop drops the request named name; the spinner keeps going while
 // another request is pending.
-func (m *Model) Stop(label string) {
-	m.labels = slices.DeleteFunc(m.labels, func(l string) bool { return l == label })
+func (m *Model) Stop(name string) {
+	m.pending = slices.DeleteFunc(m.pending, func(n string) bool { return n == name })
 }
 
-// Visible reports whether the spinner is showing.
+// Pending reports whether the request named name is out.
+func (m Model) Pending(name string) bool {
+	return slices.Contains(m.pending, name)
+}
+
+// Visible reports whether any request is out.
 func (m Model) Visible() bool {
-	return len(m.labels) > 0
+	return len(m.pending) > 0
 }
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
@@ -62,11 +66,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, nil
 }
 
-// View renders the spinner and label, cut to width.
-func (m Model) View(width int) string {
-	label := ""
-	if m.Visible() {
-		label = m.labels[len(m.labels)-1]
-	}
-	return ansi.Truncate(m.spinner.View()+" "+styles.Muted().Render(label), width, "…")
+// View renders the spinner and label. Each frame of the dot spinner ends
+// in a space, which separates the two.
+func (m Model) View(label string) string {
+	return m.spinner.View() + styles.Muted().Render(label)
 }

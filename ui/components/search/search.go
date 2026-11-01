@@ -16,12 +16,19 @@ type Model struct {
 	keys      keys.KeyMap
 	textInput textinput.Model
 	state     *state.State
+	// prev is what the box held before the search being typed, which a
+	// cancelled search puts back.
+	prev string
 }
 
 func NewModel(s *state.State) Model {
 	ti := textinput.New()
 	ti.Focus()
 	ti.Placeholder = "search by username"
+	if s.Mode == state.NormalMode {
+		// a profile is loading; / starts typing
+		ti.Cursor.SetMode(cursor.CursorHide)
+	}
 
 	return Model{
 		keys:      keys.Keys,
@@ -44,9 +51,16 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 					func() tea.Msg { return commands.SearchSubmitted{Login: login} },
 				)
 			}
+			if key.Matches(msg, m.keys.Cancel) && m.state.LookedUp {
+				// back to what was on screen, as it was
+				m.state.Mode = state.NormalMode
+				m.textInput.SetValue(m.prev)
+				return m, m.textInput.Cursor.SetMode(cursor.CursorHide)
+			}
 
 		case state.NormalMode:
-			if key.Matches(msg, m.keys.FocusInput) && m.state.CurrentView == state.UserView {
+			if key.Matches(msg, m.keys.FocusInput) && m.state.CurrentView != state.ReadmeView {
+				m.prev = m.textInput.Value()
 				m.textInput.Reset()
 				m.state.Mode = state.InsertMode
 				return m, m.textInput.Cursor.SetMode(cursor.CursorBlink)
@@ -62,6 +76,14 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+// SetLogin shows login as the search, so a failed lookup shows what was
+// looked up. It leaves a search being typed alone.
+func (m *Model) SetLogin(login string) {
+	if m.state.Mode == state.NormalMode {
+		m.textInput.SetValue(login)
+	}
+}
+
 func (m Model) View() string {
-	return "\n" + m.textInput.View()
+	return m.textInput.View()
 }

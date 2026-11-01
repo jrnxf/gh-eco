@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	cliBrowser "github.com/cli/browser"
 	"github.com/cli/go-gh/v2/pkg/browser"
 
@@ -19,15 +20,19 @@ import (
 	"github.com/jrnxf/gh-eco/ui/components/loading"
 	"github.com/jrnxf/gh-eco/ui/components/markdown"
 	"github.com/jrnxf/gh-eco/ui/components/message"
+	"github.com/jrnxf/gh-eco/ui/components/people"
 	"github.com/jrnxf/gh-eco/ui/components/search"
 	"github.com/jrnxf/gh-eco/ui/components/user"
 	"github.com/jrnxf/gh-eco/ui/keys"
 	"github.com/jrnxf/gh-eco/ui/state"
+	"github.com/jrnxf/gh-eco/ui/styles"
+	"github.com/jrnxf/gh-eco/ui/text"
 )
 
 // Client is the GitHub API the UI depends on.
 type Client interface {
 	User(ctx context.Context, login string) (models.User, error)
+	People(ctx context.Context, login string, kind models.PeopleKind, after string) (models.PeoplePage, error)
 	Readme(ctx context.Context, owner, name string) (string, error)
 	OrgReadme(ctx context.Context, org string) (string, error)
 	CachedReadme(owner, name string) (string, bool)
@@ -42,12 +47,25 @@ type Model struct {
 	keys     keys.KeyMap
 	search   search.Model
 	user     user.Model
+	people   people.Model
 	markdown markdown.Model
 	help     help.Model
 	message  message.Model
 	loading  loading.Model
-	// userReq identifies the latest user lookup.
-	userReq int
+	// start is the first command: the lookup of the login to open first,
+	// or the search box cursor blink.
+	start tea.Cmd
+	// userReq identifies the latest user lookup; pendingLogin is the login
+	// it looks up while it is unanswered.
+	userReq      int
+	pendingLogin string
+	// restart is set while the pending lookup is a submitted search, whose
+	// profile becomes the new start of the trail and of history.
+	restart bool
+	// peopleReq identifies the latest followers or following page request;
+	// peoplePending is set while it is unanswered.
+	peopleReq     int
+	peoplePending bool
 	// readmeReq identifies the latest readme request; readmePending is set
 	// while it is unanswered.
 	readmeReq     int
@@ -56,30 +74,49 @@ type Model struct {
 	starPending map[string]bool
 }
 
-// Labels for the loading spinner.
+// Names of the requests the spinner tracks.
 const (
-	searching     = "searching…"
-	loadingReadme = "loading readme…"
+	loadUser   = "user"
+	loadReadme = "readme"
+	loadPeople = "people"
 )
 
-func New(client Client) Model {
-	s := &state.State{Mode: state.InsertMode, CurrentView: state.UserView}
-	return Model{
+// trailSeparator sits between the logins of the hop trail.
+const trailSeparator = " › "
+
+// dimmed fades the screen a slow request will replace.
+var dimmed = lipgloss.NewStyle().Faint(true).Foreground(styles.Dim)
+
+// New opens the profile of login, or the search box when it is empty.
+func New(client Client, login string) Model {
+	mode := state.InsertMode
+	if login != "" {
+		mode = state.NormalMode
+	}
+	s := &state.State{Mode: mode, CurrentView: state.UserView}
+	m := Model{
 		client:      client,
 		state:       s,
 		keys:        keys.Keys,
 		search:      search.NewModel(s),
 		user:        user.NewModel(s),
+		people:      people.NewModel(s),
 		markdown:    markdown.NewModel(s),
 		help:        help.NewModel(s),
 		message:     message.NewModel(s),
 		loading:     loading.New(),
 		starPending: map[string]bool{},
 	}
+	m.start = textinput.Blink
+	if login != "" {
+		// the first frame already shows the login loading
+		m.start = m.lookup(login)
+	}
+	return m
 }
 
 func (m Model) Init() tea.Cmd {
-	return textinput.Blink
+	return m.start
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -88,42 +125,70 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		if key.Matches(msg, m.keys.Quit) {
+		// esc in a search that can be cancelled leaves the search instead
+		cancel := s.Mode == state.InsertMode && s.LookedUp && key.Matches(msg, m.keys.Cancel)
+		if key.Matches(msg, m.keys.Quit) && !cancel {
 			return m, tea.Quit
 		}
 		if s.Mode == state.NormalMode {
-			if m.readmePending {
-				// any key means the user moved on: drop the pending
+			if m.readmePending && !key.Matches(msg, m.keys.Back) {
+				// any other key means the user moved on: drop the pending
 				// readme, success or failure
-				m.readmeReq++
-				m.readmePending = false
-				m.loading.Stop(loadingReadme)
+				m.cancelReadme()
 			}
 			cmds = append(cmds, m.handleNormalKey(msg))
 		}
 
 	case commands.SearchSubmitted:
-		m.userReq++
-		m.readmeReq++
-		m.readmePending = false
-		m.loading.Stop(loadingReadme)
-		cmds = append(cmds, fetchUser(m.client, msg.Login, m.userReq), m.loading.Start(searching))
+		cmds = append(cmds, m.lookup(msg.Login))
+		m.restart = true
 
 	case commands.GetUserResponse:
 		if msg.Req != m.userReq {
 			// a newer search superseded this one
 			return m, nil
 		}
-		m.loading.Stop(searching)
-		// a readme opened on the old profile meanwhile no longer applies
-		m.readmeReq++
-		m.readmePending = false
-		m.loading.Stop(loadingReadme)
+		m.pendingLogin = ""
+		m.loading.Stop(loadUser)
+		// a readme or list opened on the old profile meanwhile no longer
+		// applies
+		m.cancelReadme()
+		m.cancelPeople()
+		if m.restart && msg.Err == nil {
+			// a searched profile starts over, so the trail shows exactly
+			// where backspace goes
+			s.History = nil
+		} else {
+			// backspace returns to the page this one replaces
+			s.Push()
+		}
+		m.restart = false
 		// a failed search clears the previous user, so nothing acts on it
 		s.User = msg.User
 		s.Focus = 0
+		s.People = state.People{}
 		// the searched profile replaces whatever was open on the old one
 		s.CurrentView = state.UserView
+		m.search.SetLogin(msg.Login)
+
+	case commands.GetPeopleResponse:
+		if msg.Req != m.peopleReq {
+			// the list it was for was closed or replaced
+			return m, nil
+		}
+		m.peoplePending = false
+		m.loading.Stop(loadPeople)
+		p := &s.People
+		if msg.Err != nil {
+			p.Failed = true
+			cmds = append(cmds, message.Show("couldn't load "+people.Noun(p.Kind)+" 😕", 2))
+			break
+		}
+		p.List = append(p.List, msg.Page.People...)
+		p.Total = msg.Page.TotalCount
+		p.HasNext, p.Next = msg.Page.HasNextPage, msg.Page.EndCursor
+		p.Loaded = true
+		cmds = append(cmds, m.morePeople())
 
 	case commands.GetReadmeResponse:
 		if msg.Req != m.readmeReq {
@@ -131,7 +196,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.readmePending = false
-		m.loading.Stop(loadingReadme)
+		m.loading.Stop(loadReadme)
 		if s.Mode != state.NormalMode || s.CurrentView != state.UserView {
 			// the user moved on before the readme arrived
 			return m, nil
@@ -144,22 +209,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case commands.StarResponse:
 		delete(m.starPending, msg.Id)
-		r := s.PinnedRepo(msg.Id)
-		if msg.Err != nil {
-			if r != nil {
+		// the repo may be on screen or on a page in history
+		for _, r := range s.Repos(msg.Id) {
+			if msg.Err != nil {
 				// undo the optimistic toggle
 				setStarred(r, msg.Prev)
+			} else {
+				r.ViewerHasStarred = msg.Starrable.ViewerHasStarred
+				r.StarsCount = msg.Starrable.StargazerCount
 			}
+		}
+		if msg.Err != nil {
 			text := "star failed: "
 			if msg.Unstar {
 				text = "unstar failed: "
 			}
 			cmds = append(cmds, message.Show(text+msg.Err.Error(), 3))
-			break
-		}
-		if r != nil {
-			r.ViewerHasStarred = msg.Starrable.ViewerHasStarred
-			r.StarsCount = msg.Starrable.StargazerCount
 		}
 
 	case tea.WindowSizeMsg:
@@ -183,7 +248,96 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds = append(cmds, cmd)
 	m.user, cmd = m.user.Update(msg)
 	cmds = append(cmds, cmd)
+	m.people, cmd = m.people.Update(msg, m.loading.Pending(loadPeople))
+	cmds = append(cmds, cmd)
 	return m, tea.Batch(cmds...)
+}
+
+// lookup fetches the profile of login.
+func (m *Model) lookup(login string) tea.Cmd {
+	m.userReq++
+	m.pendingLogin = login
+	m.restart = false
+	m.state.LookedUp = true
+	m.cancelReadme()
+	return tea.Batch(fetchUser(m.client, login, m.userReq), m.loading.Start(loadUser))
+}
+
+// cancelReadme drops the pending readme request, if any.
+func (m *Model) cancelReadme() {
+	m.readmeReq++
+	m.readmePending = false
+	m.loading.Stop(loadReadme)
+}
+
+// cancelPeople drops the pending list page request, if any.
+func (m *Model) cancelPeople() {
+	m.peopleReq++
+	m.peoplePending = false
+	m.loading.Stop(loadPeople)
+}
+
+// back cancels a pending hop or readme, keeping the page on screen, or
+// else returns to the previous page, dropping any request still out for
+// the one being left.
+func (m *Model) back() tea.Cmd {
+	if m.pendingLogin != "" {
+		m.userReq++
+		m.pendingLogin = ""
+		m.restart = false
+		m.loading.Stop(loadUser)
+		return nil
+	}
+	if m.readmePending {
+		m.cancelReadme()
+		return nil
+	}
+	s := m.state
+	if !s.Pop() {
+		return nil
+	}
+	m.cancelReadme()
+	m.cancelPeople()
+	m.user.Reset()
+	// a list left while its first page was out picks up where it was
+	s.People.Failed = false
+	return m.morePeople()
+}
+
+// openPeople opens the followers or following list of the profile on
+// screen.
+func (m *Model) openPeople(kind models.PeopleKind) tea.Cmd {
+	s := m.state
+	s.Push()
+	total := s.User.FollowersCount
+	if kind == models.Following {
+		total = s.User.FollowingCount
+	}
+	s.People = state.People{Kind: kind, Login: s.User.Login, Total: total}
+	s.CurrentView = state.PeopleView
+	m.cancelPeople()
+	return m.morePeople()
+}
+
+// morePeople fetches the next page of the open list once the selection
+// is within a screenful of its end, or its first page if none arrived.
+func (m *Model) morePeople() tea.Cmd {
+	s := m.state
+	p := s.People
+	if s.CurrentView != state.PeopleView || m.peoplePending || p.Failed {
+		return nil
+	}
+	if p.Loaded && (!p.HasNext || p.Selected < len(p.List)-s.Layout.ContentHeight) {
+		return nil
+	}
+	m.peopleReq++
+	m.peoplePending = true
+	req, c := m.peopleReq, m.client
+	fetch := func() tea.Msg {
+		page, err := c.People(context.Background(), p.Login, p.Kind, p.Next)
+		return commands.GetPeopleResponse{Req: req, Page: page, Err: err}
+	}
+	return tea.Batch(fetch, m.loading.Start(loadPeople))
 }
 
 func (m *Model) handleNormalKey(msg tea.KeyMsg) tea.Cmd {
@@ -191,10 +345,23 @@ func (m *Model) handleNormalKey(msg tea.KeyMsg) tea.Cmd {
 	target := s.Focused()
 
 	switch {
+	case key.Matches(msg, m.keys.Back):
+		return m.back()
+
 	case key.Matches(msg, m.keys.OpenGithub):
+		if s.CurrentView == state.PeopleView {
+			if p := s.People.SelectedPerson(); p != nil {
+				return openURL(p.Url)
+			}
+			return nil
+		}
 		switch target.Kind {
 		case state.UserTarget:
 			return openURL(s.User.Url)
+		case state.FollowersTarget:
+			return openURL(s.User.Url + "?tab=followers")
+		case state.FollowingTarget:
+			return openURL(s.User.Url + "?tab=following")
 		case state.RepoTarget:
 			return openURL(s.FocusedRepo().Url)
 		}
@@ -215,7 +382,7 @@ func (m *Model) handleNormalKey(msg tea.KeyMsg) tea.Cmd {
 			break
 		}
 		prev := false
-		if r := s.PinnedRepo(github.GhEcoRepoID); r != nil {
+		if r := s.Repo(github.GhEcoRepoID); r != nil {
 			prev = r.ViewerHasStarred
 			setStarred(r, true)
 		}
@@ -240,7 +407,8 @@ func (m *Model) handleNormalKey(msg tea.KeyMsg) tea.Cmd {
 		}
 	}
 
-	if s.CurrentView == state.UserView {
+	switch s.CurrentView {
+	case state.UserView:
 		switch {
 		case key.Matches(msg, m.keys.FocusNext):
 			s.FocusNext()
@@ -248,40 +416,181 @@ func (m *Model) handleNormalKey(msg tea.KeyMsg) tea.Cmd {
 			s.FocusPrev()
 		case key.Matches(msg, m.keys.FocusInput):
 			s.Focus = 0
+		case key.Matches(msg, m.keys.OpenList) && target.Kind == state.FollowersTarget:
+			return m.openPeople(models.Followers)
+		case key.Matches(msg, m.keys.OpenList) && target.Kind == state.FollowingTarget:
+			return m.openPeople(models.Following)
 		}
+
+	case state.PeopleView:
+		half := max(1, s.Layout.ContentHeight/2)
+		switch {
+		case key.Matches(msg, m.keys.FocusNext):
+			s.People.Move(1)
+		case key.Matches(msg, m.keys.FocusPrev):
+			s.People.Move(-1)
+		case key.Matches(msg, m.keys.PreviewPageDown):
+			s.People.Move(half)
+		case key.Matches(msg, m.keys.PreviewPageUp):
+			s.People.Move(-half)
+		case key.Matches(msg, m.keys.OpenProfile):
+			if p := s.People.SelectedPerson(); p != nil {
+				return m.lookup(p.Login)
+			}
+		}
+		return m.morePeople()
 	}
 	return nil
 }
 
-// layout sizes the content area between the search bar and the help bar.
+// layout sizes the content area between the top rows and the help bar.
 func (m *Model) layout() {
 	l := &m.state.Layout
 	height := l.ScreenHeight - lipgloss.Height(m.help.View())
-	if m.state.CurrentView == state.UserView {
-		height -= lipgloss.Height(m.search.View())
+	if m.state.CurrentView != state.ReadmeView {
+		height -= lipgloss.Height(m.top())
 	}
 	l.ContentWidth = l.ScreenWidth
 	l.ContentHeight = max(0, height)
 }
 
 func (m Model) View() string {
-	// a notice, then a slow request's spinner, takes the help bar's row
+	s := m.state
+	// a notice takes the help bar's row
 	bottom := m.help.View()
-	switch {
-	case m.message.Content != "":
+	if m.message.Content != "" {
 		bottom = m.message.View()
-	case m.loading.Visible():
-		bottom = m.loading.View(m.state.Layout.ScreenWidth)
 	}
 
 	// a plain join: lipgloss.JoinVertical pads every row to the widest
 	// block, which would undo the user view's right slack
-	if m.state.CurrentView == state.ReadmeView {
+	if s.CurrentView == state.ReadmeView {
 		return strings.Join([]string{m.markdown.View(), bottom}, "\n")
 	}
-	return strings.Join([]string{m.search.View(), m.user.View(), bottom}, "\n")
+	var content string
+	switch {
+	case s.CurrentView == state.PeopleView:
+		spinner := ""
+		if m.loading.Pending(loadPeople) {
+			spinner = m.loading.View("loading " + people.Noun(s.People.Kind) + "…")
+		}
+		content = m.people.View(spinner)
+	default:
+		content = m.user.View()
+	}
+	// a slow request that replaces the screen shows over it
+	switch {
+	case m.loading.Pending(loadUser):
+		content = m.loadingOver(content, "loading "+m.pendingLogin+"…")
+	case m.loading.Pending(loadReadme):
+		content = m.loadingOver(content, "loading readme…")
+	}
+	return strings.Join([]string{m.top(), content, bottom}, "\n")
 }
 
+// top is the hop trail over the search box, which shows only while a
+// search is typed or nothing else is on screen.
+func (m Model) top() string {
+	s := m.state
+	search := ""
+	if s.Mode == state.InsertMode || (s.User.Login == "" && m.pendingLogin == "") {
+		search = m.search.View()
+	}
+	trail := m.trail()
+	if trail != "" && search != "" {
+		// an empty row keeps the trail apart from the search line
+		return trail + "\n\n" + search
+	}
+	return trail + "\n" + search
+}
+
+// trail names the profiles hopped through, oldest first, ending in bold
+// with the one on screen or loading. It keeps the newest that fit.
+func (m Model) trail() string {
+	s := m.state
+	var logins []string
+	add := func(login string) {
+		// a list opened on a profile is a page of the same login
+		if login != "" && (len(logins) == 0 || logins[len(logins)-1] != login) {
+			logins = append(logins, login)
+		}
+	}
+	if m.restart && m.pendingLogin != "" {
+		// a searched profile starts a new trail
+		add(m.pendingLogin)
+	} else {
+		for _, p := range s.History {
+			add(p.User.Login)
+		}
+		add(s.User.Login)
+		add(m.pendingLogin)
+	}
+	if len(logins) == 0 {
+		return ""
+	}
+
+	var current string
+	if s.User.Login != "" || m.pendingLogin != "" {
+		current, logins = logins[len(logins)-1], logins[:len(logins)-1]
+	}
+	width := max(0, s.Layout.ContentWidth-state.RightSlack)
+	if current != "" && len(logins) == 0 {
+		return styles.Bold.Render(text.Ellipsize(current, width))
+	}
+	sep := styles.Muted().Render(trailSeparator)
+	render := func(earlier []string) string {
+		parts := make([]string, len(earlier))
+		for i, l := range earlier {
+			parts[i] = styles.Muted().Render(l)
+		}
+		line := strings.Join(parts, sep)
+		if current != "" {
+			line += sep + styles.Bold.Render(current)
+		}
+		return line
+	}
+	// drop the oldest until the rest fit, marking the cut
+	for cut := 0; cut <= len(logins); cut++ {
+		earlier := logins
+		if cut > 0 {
+			earlier = append([]string{"…"}, logins[cut:]...)
+		}
+		if line := render(earlier); lipgloss.Width(line) <= width {
+			return line
+		}
+	}
+	return ansi.Truncate(render([]string{"…"}), width, "…")
+}
+
+// loadingOver shows a spinner and label where content is about to be
+// replaced. What is on screen stays, dimmed, under the label; with nothing
+// on screen the label sits in an empty area.
+func (m Model) loadingOver(content, label string) string {
+	s := m.state
+	width := max(0, s.Layout.ContentWidth-state.RightSlack)
+	label = text.Ellipsize(label, max(0, width-2))
+	spinner := m.loading.View(label)
+	line := strings.Repeat(" ", max(0, (width-lipgloss.Width(spinner))/2)) + spinner
+
+	lines := strings.Split(content, "\n")
+	if s.User.Login == "" {
+		// nothing to keep: a failed search's message, or an empty screen
+		lines = make([]string, len(lines))
+		if len(lines) > 0 {
+			lines[len(lines)/3] = line
+		}
+		return strings.Join(lines, "\n")
+	}
+	for i, l := range lines {
+		lines[i] = dimmed.Render(ansi.Strip(l))
+	}
+	if len(lines) > 0 {
+		lines[0] = line
+	}
+	return strings.Join(lines, "\n")
+}
+
+// fetchUser looks up login.
 func fetchUser(c Client, login string, req int) tea.Cmd {
 	return func() tea.Msg {
 		u, err := c.User(context.Background(), login)
@@ -333,7 +642,7 @@ func (m *Model) openReadme(ref readmeRef) tea.Cmd {
 		}
 		return commands.GetReadmeResponse{Req: req, Readme: text, Err: err}
 	}
-	return tea.Batch(fetch, m.loading.Start(loadingReadme))
+	return tea.Batch(fetch, m.loading.Start(loadReadme))
 }
 
 // star stars id, or removes the star when starred is true. prev is the
