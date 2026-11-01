@@ -12,7 +12,7 @@ import (
 )
 
 // replyTimeout bounds the wait for a terminal that answers neither query.
-const replyTimeout = 150 * time.Millisecond
+const replyTimeout = time.Second
 
 // queryBackground asks the terminal for its background color (OSC 11),
 // followed by a device attributes request (DA1) that every terminal
@@ -38,22 +38,30 @@ func queryBackground() (reply string, ok bool) {
 	deadline := time.Now().Add(replyTimeout)
 	for !answeredDA1(buf.String()) {
 		left := time.Until(deadline)
-		if left <= 0 {
+		if left <= 0 || !readInto(in, &buf, chunk, left) {
 			break
 		}
-		var fds unix.FdSet
-		fds.Set(in)
-		tv := unix.NsecToTimeval(left.Nanoseconds())
-		if n, err := unix.Select(in+1, &fds, nil, nil, &tv); err != nil || n == 0 {
-			break
-		}
-		k, err := unix.Read(in, chunk)
-		if err != nil || k == 0 {
-			break
-		}
-		buf.Write(chunk[:k])
+	}
+	for readInto(in, &buf, chunk, 0) {
 	}
 	return buf.String(), true
+}
+
+// readInto waits up to wait for fd to become readable and appends what
+// it reads to buf. It reports whether any bytes were read.
+func readInto(fd int, buf *strings.Builder, chunk []byte, wait time.Duration) bool {
+	var fds unix.FdSet
+	fds.Set(fd)
+	tv := unix.NsecToTimeval(wait.Nanoseconds())
+	if n, err := unix.Select(fd+1, &fds, nil, nil, &tv); err != nil || n == 0 {
+		return false
+	}
+	k, err := unix.Read(fd, chunk)
+	if err != nil || k == 0 {
+		return false
+	}
+	buf.Write(chunk[:k])
+	return true
 }
 
 // answeredDA1 reports whether s holds a DA1 reply, "\x1b[?...c".
