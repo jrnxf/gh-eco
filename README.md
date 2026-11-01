@@ -68,7 +68,7 @@ to open one straight away:
 gh eco <login>
 ```
 
-Press `/` to search for another login. Move to a user's followers or following count and press `enter` to list them, `enter` again to open someone's profile, and `backspace` to go back. Profiles with nothing pinned show their most-starred repositories instead.
+Press `/` to search for another login; submitting it clears the `backspace` history, and `esc` leaves the search instead. Move to a user's followers or following count and press `enter` to list them, `enter` again to open someone's profile, and `backspace` to go back. Profiles with nothing pinned show their most-starred repositories instead.
 
 gh-eco follows your terminal's light or dark background; if it guesses wrong, set `GH_ECO_THEME=light` or `GH_ECO_THEME=dark`.
 
@@ -93,7 +93,8 @@ gh extension upgrade eco
 | `o` | open in github |
 | `s` | star repo |
 | `!` | star gh-eco |
-| `esc` / `ctrl+c` | quit |
+| `esc` | leave search / quit |
+| `ctrl+c` | quit |
 
 ## Contributing
 
