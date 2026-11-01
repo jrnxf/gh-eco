@@ -31,16 +31,24 @@ func NewModel(s *state.State) Model {
 }
 
 // Update scrolls the list just enough to keep the selection on screen,
-// since the root model may have moved it or resized the screen.
-func (m Model) Update(tea.Msg) (Model, tea.Cmd) {
+// since the root model may have moved it or resized the screen. While the
+// next page loads, its spinner takes a row after the last entry.
+func (m Model) Update(_ tea.Msg, loading bool) (Model, tea.Cmd) {
 	p := &m.state.People
 	rows := m.rows()
+	n, bottom := len(p.List), p.Selected
+	if loading {
+		n++
+		if p.Selected == len(p.List)-1 {
+			bottom++
+		}
+	}
 	if p.Selected < p.Offset {
 		p.Offset = p.Selected
-	} else if p.Selected >= p.Offset+rows {
-		p.Offset = p.Selected - rows + 1
+	} else if bottom >= p.Offset+rows {
+		p.Offset = min(p.Selected, bottom-rows+1)
 	}
-	p.Offset = max(0, min(p.Offset, len(p.List)-rows))
+	p.Offset = max(0, min(p.Offset, n-rows))
 	return m, nil
 }
 
@@ -50,8 +58,8 @@ func (m Model) rows() int {
 }
 
 // View shows the title and the visible entries, exactly ContentHeight
-// lines. A non-empty spinner goes where the next entries will appear, once
-// the list is scrolled to its end.
+// lines. A non-empty spinner takes the row after the last entry, where the
+// next entries will appear.
 func (m Model) View(spinner string) string {
 	width := max(0, m.state.Layout.ContentWidth-state.RightSlack)
 	p := m.state.People
@@ -61,21 +69,16 @@ func (m Model) View(spinner string) string {
 	case len(p.List) > 0:
 		column := min(width, maxRowWidth)
 		pad := strings.Repeat(" ", (width-column)/2)
-		start, end := p.Offset, min(len(p.List), p.Offset+m.rows())
-		atEnd := spinner != "" && end == len(p.List)
-		if atEnd && end-start == m.rows() {
-			// the spinner takes an end row the selection is not on
-			if p.Selected == end-1 {
-				start++
-			} else {
-				end--
+		n := len(p.List)
+		if spinner != "" {
+			n++
+		}
+		for i := p.Offset; i < min(n, p.Offset+m.rows()); i++ {
+			if i == len(p.List) {
+				lines = append(lines, center(spinner, width))
+				break
 			}
-		}
-		for i := start; i < end; i++ {
 			lines = append(lines, pad+row(p.List[i], i == p.Selected, column))
-		}
-		if atEnd {
-			lines = append(lines, center(spinner, width))
 		}
 	case spinner != "":
 		lines = append(lines, center(spinner, width))

@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/jrnxf/gh-eco/models"
 	"github.com/jrnxf/gh-eco/ui/commands"
@@ -384,9 +385,33 @@ func Test_ListShowsTheNextPageLoadingAtItsEnd(t *testing.T) {
 	if !spinnerShows(m, "loading followers…") {
 		t.Errorf("no spinner under a full list while the next page loads:\n%s", m.View())
 	}
-	if !strings.Contains(m.View(), "› fan-49") {
-		t.Errorf("selected fan-49 is not on screen:\n%s", m.View())
+	row49 := rowOf(m, "› fan-49")
+	if row49 < 0 {
+		t.Fatalf("selected fan-49 is not on screen:\n%s", m.View())
 	}
+
+	// k moves the cursor up a row; the list stays put
+	m, _ = send(m, keyRunes("k"))
+	if got := rowOf(m, "› fan-48"); got != row49-1 {
+		t.Errorf("after k fan-48 is on row %d, want %d:\n%s", got, row49-1, m.View())
+	}
+	if !spinnerShows(m, "loading followers…") {
+		t.Errorf("spinner gone after k while the next page loads:\n%s", m.View())
+	}
+	m, _ = send(m, keyRunes("j"))
+	if got := rowOf(m, "› fan-49"); got != row49 {
+		t.Errorf("after j fan-49 is on row %d, want %d:\n%s", got, row49, m.View())
+	}
+}
+
+// rowOf is the frame row showing s, or -1.
+func rowOf(m Model, s string) int {
+	for i, line := range strings.Split(ansi.Strip(m.View()), "\n") {
+		if strings.Contains(line, s) {
+			return i
+		}
+	}
+	return -1
 }
 
 func Test_ListFailureAndEmptyList(t *testing.T) {

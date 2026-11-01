@@ -248,7 +248,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds = append(cmds, cmd)
 	m.user, cmd = m.user.Update(msg)
 	cmds = append(cmds, cmd)
-	m.people, cmd = m.people.Update(msg)
+	m.people, cmd = m.people.Update(msg, m.loading.Pending(loadPeople))
 	cmds = append(cmds, cmd)
 	return m, tea.Batch(cmds...)
 }
