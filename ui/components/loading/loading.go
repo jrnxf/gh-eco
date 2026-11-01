@@ -3,6 +3,8 @@
 package loading
 
 import (
+	"slices"
+
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -13,8 +15,8 @@ import (
 
 type Model struct {
 	spinner spinner.Model
-	// label names the pending request; empty when nothing is pending.
-	label string
+	// labels names the pending requests, oldest first; the newest shows.
+	labels []string
 }
 
 func New() Model {
@@ -26,10 +28,12 @@ func New() Model {
 	}
 }
 
-// Start shows the spinner for a request labelled label, replacing any other.
+// Start shows the spinner for a request labelled label, on top of any
+// other pending request.
 func (m *Model) Start(label string) tea.Cmd {
-	wasIdle := m.label == ""
-	m.label = label
+	wasIdle := !m.Visible()
+	m.Stop(label)
+	m.labels = append(m.labels, label)
 	if wasIdle {
 		return m.spinner.Tick
 	}
@@ -37,21 +41,19 @@ func (m *Model) Start(label string) tea.Cmd {
 	return nil
 }
 
-// Stop hides the spinner if it is showing for label; a request that has
-// replaced it keeps going.
+// Stop drops the request labelled label; the spinner keeps going while
+// another request is pending.
 func (m *Model) Stop(label string) {
-	if m.label == label {
-		m.label = ""
-	}
+	m.labels = slices.DeleteFunc(m.labels, func(l string) bool { return l == label })
 }
 
 // Visible reports whether the spinner is showing.
 func (m Model) Visible() bool {
-	return m.label != ""
+	return len(m.labels) > 0
 }
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
-	if msg, ok := msg.(spinner.TickMsg); ok && m.label != "" {
+	if msg, ok := msg.(spinner.TickMsg); ok && m.Visible() {
 		// ticks stop once nothing is pending
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -62,5 +64,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 // View renders the spinner and label, cut to width.
 func (m Model) View(width int) string {
-	return ansi.Truncate(m.spinner.View()+" "+styles.Muted().Render(m.label), width, "…")
+	label := ""
+	if m.Visible() {
+		label = m.labels[len(m.labels)-1]
+	}
+	return ansi.Truncate(m.spinner.View()+" "+styles.Muted().Render(label), width, "…")
 }

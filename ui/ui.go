@@ -115,9 +115,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.loading.Stop(searching)
+		// a readme opened on the old profile meanwhile no longer applies
+		m.readmeReq++
+		m.readmePending = false
+		m.loading.Stop(loadingReadme)
 		// a failed search clears the previous user, so nothing acts on it
 		s.User = msg.User
 		s.Focus = 0
+		// the searched profile replaces whatever was open on the old one
+		s.CurrentView = state.UserView
 
 	case commands.GetReadmeResponse:
 		if msg.Req != m.readmeReq {

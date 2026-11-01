@@ -382,6 +382,53 @@ func Test_StaleReadmeIsDropped(t *testing.T) {
 	})
 }
 
+func Test_ReadmeOpenedDuringSearch(t *testing.T) {
+	// start loads octocat, submits hubot and presses r on octocat's alpha
+	// card before hubot arrives. It returns both pending responses.
+	start := func(t *testing.T) (Model, commands.GetUserResponse, commands.GetReadmeResponse) {
+		client := &fakeClient{
+			users:   map[string]models.User{"octocat": octocat(), "hubot": {Login: "hubot"}},
+			readmes: map[string]string{"octocat/alpha": "# alpha readme"},
+		}
+		m := newModel(t, client)
+		m, res := lookup(t, m, "octocat")
+		m, _ = send(m, res)
+		m, _ = send(m, keyRunes("/"))
+		m, hubot := lookup(t, m, "hubot")
+		m, _ = send(m, keyRunes("j")) // user
+		m, _ = send(m, keyRunes("j")) // alpha
+		m, msgs := send(m, keyRunes("r"))
+		return m, hubot, find[commands.GetReadmeResponse](t, msgs)
+	}
+
+	t.Run("readme lands first", func(t *testing.T) {
+		m, hubot, readme := start(t)
+		m, _ = send(m, readme)
+		if !m.loading.Visible() {
+			t.Errorf("spinner stopped while hubot's search is still out")
+		}
+		m, _ = send(m, hubot)
+		if m.state.CurrentView != state.UserView || m.state.User.Login != "hubot" {
+			t.Errorf("view = %v for %q, want hubot's profile", m.state.CurrentView, m.state.User.Login)
+		}
+		if m.loading.Visible() {
+			t.Errorf("spinner still showing with nothing pending")
+		}
+	})
+
+	t.Run("search lands first", func(t *testing.T) {
+		m, hubot, readme := start(t)
+		m, _ = send(m, hubot)
+		m, _ = send(m, readme)
+		if m.state.CurrentView != state.UserView || m.state.User.Login != "hubot" {
+			t.Errorf("octocat's readme opened over hubot: view = %v", m.state.CurrentView)
+		}
+		if m.loading.Visible() {
+			t.Errorf("spinner still showing with nothing pending")
+		}
+	})
+}
+
 func Test_FailedSearchClearsPreviousUser(t *testing.T) {
 	client := &fakeClient{users: map[string]models.User{"octocat": octocat()}}
 	m := newModel(t, client)
