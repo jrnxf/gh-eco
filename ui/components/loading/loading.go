@@ -1,5 +1,5 @@
-// Package loading animates the spinner shown where a request's answer will
-// appear, while the request is out on the network.
+// Package loading animates the spinner shown while a request is out on the
+// network.
 package loading
 
 import (
