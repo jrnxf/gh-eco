@@ -509,10 +509,10 @@ func Test_EscLeavesASearchWithNothingLost(t *testing.T) {
 	if trail, search := topRows(m); trail != "alice › bob" || !strings.Contains(search, "car") {
 		t.Errorf("while typing the top rows are %q and %q", trail, search)
 	}
-	if quits(m, esc) {
+	m, in := send(m, esc)
+	if _, quit := firstOf[tea.QuitMsg](in.all(t)); quit {
 		t.Fatal("esc in a search quit")
 	}
-	m, _ = send(m, esc)
 	if m.state.Mode != state.NormalMode || m.state.User.Login != "bob" || m.state.CurrentView != state.UserView {
 		t.Errorf("esc left mode %v on %q in view %v", m.state.Mode, m.state.User.Login, m.state.CurrentView)
 	}
@@ -528,8 +528,15 @@ func Test_EscLeavesASearchWithNothingLost(t *testing.T) {
 	if m.state.User.Login != "alice" || m.state.CurrentView != state.PeopleView {
 		t.Errorf("backspace after esc shows %q in view %v", m.state.User.Login, m.state.CurrentView)
 	}
+	// esc now closes layers like backspace, and quits at the top level
+	if quits(m, esc) {
+		t.Error("esc quit with a page to go back to")
+	}
+	if m.state.User.Login != "alice" || m.state.CurrentView != state.UserView {
+		t.Errorf("esc shows %q in view %v, want alice's profile", m.state.User.Login, m.state.CurrentView)
+	}
 	if !quits(m, esc) {
-		t.Error("esc outside a search does not quit")
+		t.Error("esc at the top level does not quit")
 	}
 }
 
@@ -734,5 +741,169 @@ func Test_BackspaceInAReadmeClosesOnlyTheReadme(t *testing.T) {
 	m, _ = send(m, backspace)
 	if m.state.CurrentView != state.PeopleView {
 		t.Errorf("second backspace shows view %v, want the list", m.state.CurrentView)
+	}
+}
+
+var qKey = keyRunes("q")
+
+// press delivers msg and reports whether it quit the program. Unlike
+// quits, it keeps the model the key produced.
+func press(m Model, msg tea.Msg) (Model, bool) {
+	next, cmd := m.Update(msg)
+	if cmd == nil {
+		return next.(Model), false
+	}
+	_, quit := cmd().(tea.QuitMsg)
+	return next.(Model), quit
+}
+
+// hopFixture is alice, who has a repo and one follower, bob.
+func hopFixture() *fakeClient {
+	return &fakeClient{
+		users:   map[string]models.User{"alice": profileWithRepo("alice"), "bob": profileWithRepo("bob")},
+		readmes: map[string]string{"alice/alpha": "# alice readme", "bob/alpha": "# bob readme"},
+		people:  map[string][]models.Person{"followers alice": {{Login: "bob"}}},
+	}
+}
+
+func Test_LatestKeyWinsOverAPendingHop(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		key  tea.KeyMsg
+	}{{"j", keyRunes("j")}, {"k", keyRunes("k")}, {"enter", enter}} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := launch(t, hopFixture(), "alice", 80, 24)
+			m, bob := lookup(t, m, "bob")
+			// the search put focus back on the profile; park it on the
+			// followers count without a key press
+			for m.state.Focused().Kind != state.FollowersTarget {
+				m.state.FocusNext()
+			}
+
+			m, in := send(m, tc.key)
+			if m.pendingLogin != "" || m.loading.Visible() && tc.key.Type != tea.KeyEnter {
+				t.Errorf("%s left the hop pending: %q", tc.name, m.pendingLogin)
+			}
+			if trail, _ := topRows(m); !strings.HasPrefix(trail, "alice") || strings.Contains(trail, "bob") {
+				t.Errorf("trail after %s is %q, want alice alone", tc.name, trail)
+			}
+			if tc.key.Type == tea.KeyEnter {
+				// the key acted at once: alice's followers opened
+				if m.state.CurrentView != state.PeopleView {
+					t.Errorf("enter did not open the list: view %v", m.state.CurrentView)
+				}
+				m, _ = send(m, find[commands.GetPeopleResponse](t, in))
+			}
+			// bob's late answer changes nothing
+			before := m.state.CurrentView
+			m, _ = send(m, bob)
+			if m.state.User.Login != "alice" || m.state.CurrentView != before || len(m.state.History) > 1 {
+				t.Errorf("a dropped hop landed: %q in view %v", m.state.User.Login, m.state.CurrentView)
+			}
+		})
+	}
+}
+
+func Test_EscClosesTheTopLayer(t *testing.T) {
+	// readme -> its profile, history untouched
+	m := launch(t, hopFixture(), "alice", 80, 24)
+	m = focusRepo(t, m, "alice-repo")
+	m, msgs := send(m, keyRunes("r"))
+	m, _ = send(m, find[commands.GetReadmeResponse](t, msgs))
+	m, quit := press(m, esc)
+	if quit || m.state.CurrentView != state.UserView || m.state.User.Login != "alice" {
+		t.Errorf("esc in a readme: view %v on %q", m.state.CurrentView, m.state.User.Login)
+	}
+
+	// pending readme -> dropped, profile stays
+	m, _ = send(m, keyRunes("r"))
+	if !m.readmePending {
+		t.Fatal("readme not pending")
+	}
+	if m, quit = press(m, esc); quit || m.readmePending || m.loading.Visible() {
+		t.Errorf("esc did not drop the pending readme")
+	}
+
+	// list -> profile
+	m = openList(t, m, state.FollowersTarget)
+	if m, quit = press(m, esc); quit || m.state.CurrentView != state.UserView || len(m.state.History) != 0 {
+		t.Errorf("esc in a list: view %v, %d pages of history", m.state.CurrentView, len(m.state.History))
+	}
+
+	// pending hop -> dropped; the hopped profile -> the page it came from
+	m, res := lookup(t, m, "bob")
+	if m, quit = press(m, esc); quit || m.pendingLogin != "" || m.state.User.Login != "alice" {
+		t.Errorf("esc did not drop the pending hop")
+	}
+	m, _ = send(m, res)
+	if m.state.User.Login != "alice" {
+		t.Errorf("a dropped hop landed")
+	}
+	m = openList(t, m, state.FollowersTarget)
+	m, msgs = send(m, enter)
+	m, _ = send(m, find[commands.GetUserResponse](t, msgs))
+	if m, quit = press(m, esc); quit || m.state.CurrentView != state.PeopleView {
+		t.Errorf("esc on a hopped profile shows view %v", m.state.CurrentView)
+	}
+
+	// the top level quits
+	m, _ = press(m, esc)
+	if _, quit = press(m, esc); !quit {
+		t.Errorf("esc at the top level does not quit (user %q, history %d)", m.state.User.Login, len(m.state.History))
+	}
+}
+
+func Test_QAlwaysQuitsExceptWhileTyping(t *testing.T) {
+	m := launch(t, hopFixture(), "alice", 80, 24)
+	if _, quit := press(m, qKey); !quit {
+		t.Error("q on a profile does not quit")
+	}
+	m = openList(t, m, state.FollowersTarget)
+	if _, quit := press(m, qKey); !quit {
+		t.Error("q in a list does not quit")
+	}
+	m, _ = send(m, esc)
+	m = focusRepo(t, m, "alice-repo")
+	m, msgs := send(m, keyRunes("r"))
+	m, _ = send(m, find[commands.GetReadmeResponse](t, msgs))
+	if _, quit := press(m, qKey); !quit {
+		t.Error("q in a readme does not quit")
+	}
+	m, _ = send(m, esc)
+	m, _ = lookup(t, m, "bob")
+	if _, quit := press(m, qKey); !quit {
+		t.Error("q over a pending hop does not quit")
+	}
+
+	// in the search box q is a letter
+	m, _ = send(m, keyRunes("/"))
+	m, quit := press(m, qKey)
+	if quit {
+		t.Fatal("q quit from the search box")
+	}
+	if _, search := topRows(m); !strings.Contains(search, "q") {
+		t.Errorf("q was not typed: %q", search)
+	}
+}
+
+func Test_SlashOpensSearchInsideAReadme(t *testing.T) {
+	m := launch(t, hopFixture(), "alice", 80, 24)
+	m = focusRepo(t, m, "alice-repo")
+	m, msgs := send(m, keyRunes("r"))
+	m, _ = send(m, find[commands.GetReadmeResponse](t, msgs))
+
+	m, _ = send(m, keyRunes("/"))
+	if m.state.Mode != state.InsertMode || m.state.CurrentView != state.UserView {
+		t.Fatalf("/ in a readme left mode %v in view %v", m.state.Mode, m.state.CurrentView)
+	}
+	m, _ = send(m, keyRunes("bo"))
+	if _, search := topRows(m); !strings.Contains(search, "bo") {
+		t.Errorf("typing in the search after / in a readme: %q", search)
+	}
+	checkFrame(t, m.View(), 80, 24)
+	// esc leaves the search on the profile
+	m, _ = send(m, esc)
+	if m.state.Mode != state.NormalMode || m.state.User.Login != "alice" {
+		t.Errorf("esc after / in a readme: mode %v on %q", m.state.Mode, m.state.User.Login)
 	}
 }

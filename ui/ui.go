@@ -139,14 +139,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// esc in a search that can be cancelled leaves the search instead
 		cancel := s.Mode == state.InsertMode && s.LookedUp && key.Matches(msg, m.keys.Cancel)
-		if key.Matches(msg, m.keys.Quit) && !cancel {
+		// q is a letter in the search box
+		typingQ := s.Mode == state.InsertMode && msg.String() == "q"
+		// esc closes the layer on top, like backspace, and quits only
+		// from the top level
+		escCloses := s.Mode == state.NormalMode && key.Matches(msg, m.keys.Cancel) && m.canGoBack()
+		if key.Matches(msg, m.keys.Quit) && !cancel && !typingQ && !escCloses {
 			return m, tea.Quit
 		}
 		if s.Mode == state.NormalMode {
+			if escCloses {
+				cmds = append(cmds, m.back())
+				break
+			}
 			if m.readmePending && !key.Matches(msg, m.keys.Back) {
 				// any other key means the user moved on: drop the pending
 				// readme, success or failure
 				m.cancelReadme()
+			}
+			if m.pendingLogin != "" && !key.Matches(msg, m.keys.Back) && !key.Matches(msg, m.keys.FocusInput) && !key.Matches(msg, m.keys.StarGhEco) {
+				// the latest key wins: it acts on the dimmed page at once,
+				// and the profile still loading is dropped
+				m.cancelHop()
 			}
 			cmds = append(cmds, m.handleNormalKey(msg))
 		}
@@ -253,6 +267,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds = append(cmds, cmd)
 	m.message, cmd = m.message.Update(msg)
 	cmds = append(cmds, cmd)
+	s.Backable = m.canGoBack()
 	// size the content area after every view change above, before the
 	// components that fill it
 	m.layout()
@@ -289,15 +304,26 @@ func (m *Model) cancelPeople() {
 	m.loading.Stop(loadPeople)
 }
 
+// cancelHop drops the pending profile lookup, keeping the page on screen.
+func (m *Model) cancelHop() {
+	m.userReq++
+	m.pendingLogin = ""
+	m.restart = false
+	m.loading.Stop(loadUser)
+}
+
+// canGoBack reports whether back has anything to undo: a load to drop, a
+// readme to close, or a page to return to.
+func (m Model) canGoBack() bool {
+	return m.pendingLogin != "" || m.readmePending || m.state.CurrentView == state.ReadmeView || len(m.state.History) > 0
+}
+
 // back cancels a pending hop or readme, keeping the page on screen, or
 // else returns to the previous page, dropping any request still out for
 // the one being left.
 func (m *Model) back() tea.Cmd {
 	if m.pendingLogin != "" {
-		m.userReq++
-		m.pendingLogin = ""
-		m.restart = false
-		m.loading.Stop(loadUser)
+		m.cancelHop()
 		return nil
 	}
 	if m.readmePending {

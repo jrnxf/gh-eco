@@ -60,7 +60,12 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			}
 
 		case state.NormalMode:
-			if key.Matches(msg, m.keys.FocusInput) && m.state.CurrentView != state.ReadmeView {
+			if key.Matches(msg, m.keys.FocusInput) {
+				if m.state.CurrentView == state.ReadmeView {
+					// the readme has no search row; the search opens on its
+					// profile, which esc returns to
+					m.state.CurrentView = state.UserView
+				}
 				m.prev = m.textInput.Value()
 				m.textInput.Reset()
 				m.state.Mode = state.InsertMode

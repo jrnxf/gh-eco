@@ -20,6 +20,9 @@ type KeyMap struct {
 	Back            key.Binding
 	Cancel          key.Binding
 	Quit            key.Binding
+	// QuitKey is the help entry for q, which quits from anywhere but the
+	// search box, while esc is busy closing layers.
+	QuitKey key.Binding
 }
 
 var Keys = KeyMap{
@@ -60,8 +63,12 @@ var Keys = KeyMap{
 		key.WithHelp("esc", "cancel"),
 	),
 	Quit: key.NewBinding(
-		key.WithKeys("esc", "ctrl+c"),
+		key.WithKeys("esc", "ctrl+c", "q"),
 		key.WithHelp("esc", "quit"),
+	),
+	QuitKey: key.NewBinding(
+		key.WithKeys("q"),
+		key.WithHelp("q", "quit"),
 	),
 	Search: key.NewBinding(
 		key.WithKeys("enter"),

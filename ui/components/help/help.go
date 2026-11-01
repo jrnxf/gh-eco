@@ -96,7 +96,9 @@ func (m Model) collectHelpBindings() []key.Binding {
 			bindings = append(bindings, k.StarGhEco)
 		}
 	}
-	bindings = append(bindings, k.Quit)
-
-	return bindings
+	if s.Mode == state.NormalMode && s.Backable {
+		// esc goes back here, so q is the way out
+		return append(bindings, k.QuitKey)
+	}
+	return append(bindings, k.Quit)
 }

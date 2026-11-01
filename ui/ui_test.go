@@ -429,8 +429,8 @@ func Test_StaleReadmeIsDropped(t *testing.T) {
 }
 
 func Test_ReadmeOpenedDuringSearch(t *testing.T) {
-	// start loads octocat, submits hubot and presses r on octocat's alpha
-	// card before hubot arrives. It returns both pending responses.
+	// start loads octocat, presses r on its alpha card and submits hubot
+	// before the readme arrives. It returns both pending responses.
 	start := func(t *testing.T) (Model, commands.GetUserResponse, commands.GetReadmeResponse) {
 		client := &fakeClient{
 			users:   map[string]models.User{"octocat": octocat(), "hubot": {Login: "hubot"}},
@@ -439,10 +439,9 @@ func Test_ReadmeOpenedDuringSearch(t *testing.T) {
 		m := newModel(t, client)
 		m, res := lookup(t, m, "octocat")
 		m, _ = send(m, res)
-		m, _ = send(m, keyRunes("/"))
-		m, hubot := lookup(t, m, "hubot")
 		m = focusRepo(t, m, "A")
 		m, msgs := send(m, keyRunes("r"))
+		m, hubot := lookup(t, m, "hubot")
 		return m, hubot, find[commands.GetReadmeResponse](t, msgs)
 	}
 

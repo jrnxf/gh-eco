@@ -82,7 +82,7 @@ gh extension upgrade eco
 
 | Key | Action |
 | --- | --- |
-| `/` | focus input / search |
+| `/` | search, from anywhere (a readme closes) |
 | `enter` | search / open list / open profile |
 | `backspace` | close the readme, or go back to the previous page |
 | `j` / `↓` | move down |
@@ -93,8 +93,8 @@ gh extension upgrade eco
 | `o` | open in github |
 | `s` | star repo |
 | `!` | star gh-eco |
-| `esc` | leave search / quit |
-| `ctrl+c` | quit |
+| `esc` | leave search, or close the top layer like `backspace`; quits from the top level |
+| `q` / `ctrl+c` | quit |
 
 ## Contributing
 
