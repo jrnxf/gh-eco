@@ -117,9 +117,3 @@ Check out these amazing projects that inspired `gh-eco`!
 
 - anything and everything by [charm.sh](https://charm.sh/)
 - [gh-dash](https://github.com/dlvhdr/gh-dash)
-
-## Follow
-
-[![github](https://img.shields.io/github/followers/jrnxf?style=social)](https://github.com/jrnxf)
-[![twitter](https://img.shields.io/twitter/follow/_jrnxf?color=white&style=social)](https://twitter.com/_jrnxf)
-[![youtube](https://img.shields.io/youtube/channel/subscribers/UCEDfokz6igeN4bX7Whq49-g?style=social)](https://www.youtube.com/@jrnxf)
