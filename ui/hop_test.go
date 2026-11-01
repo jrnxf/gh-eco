@@ -670,3 +670,28 @@ func Test_TypedSearchKeepsTheTrailOnOneNarrowLine(t *testing.T) {
 		t.Errorf("top row is not the search with a left-truncated trail: %q", row)
 	}
 }
+
+func Test_LongSearchStaysOnTheTopLine(t *testing.T) {
+	client := &fakeClient{users: map[string]models.User{"alice": {Login: "alice"}}}
+	m := launch(t, client, "alice", 40, 24)
+	before := contentRows(m)
+
+	m, _ = send(m, keyRunes("/"))
+	m, _ = send(m, keyRunes("a-very-long-login-name-of-39-characters"))
+	checkFrame(t, m.View(), 40, 24)
+	if got := contentRows(m); strings.Join(got, "\n") != strings.Join(before, "\n") {
+		t.Errorf("a long search moved the content:\n%s", m.View())
+	}
+	if row := topRow(m); !strings.HasSuffix(row, "characters") {
+		t.Errorf("a long search does not keep its end in sight: %q", row)
+	}
+
+	// with the cursor moved back into the search
+	for range 30 {
+		m, _ = send(m, tea.KeyMsg{Type: tea.KeyLeft})
+	}
+	checkFrame(t, m.View(), 40, 24)
+	if got := contentRows(m); strings.Join(got, "\n") != strings.Join(before, "\n") {
+		t.Errorf("moving the cursor in a long search moved the content:\n%s", m.View())
+	}
+}

@@ -93,5 +93,8 @@ func (m Model) View(width int) string {
 	}
 	// the prompt takes 2 cells and the cursor 1
 	m.textInput.Width = max(1, width-3)
+	pos := m.textInput.Position()
+	m.textInput.CursorEnd()
+	m.textInput.SetCursor(pos)
 	return m.textInput.View()
 }
