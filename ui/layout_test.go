@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/jrnxf/gh-eco/models"
 	"github.com/jrnxf/gh-eco/ui/commands"
@@ -99,8 +100,12 @@ func Test_FrameFitsScreen(t *testing.T) {
 				t.Fatalf("%dx%d: search bar scrolled off the top", width, height)
 			}
 
+			// the focused profile name, with its colored underline
+			m, _ = send(m, keyRunes("j"))
+			checkFrame(t, m.View(), width, height)
+
 			// walking focus to the last pin scrolls it into view
-			for range len(busyUser().PinnedRepos) + 1 {
+			for range len(busyUser().PinnedRepos) {
 				m, _ = send(m, keyRunes("j"))
 			}
 			checkFrame(t, m.View(), width, height)
@@ -155,6 +160,37 @@ func Test_ResizeKeepsFocusedCardVisible(t *testing.T) {
 		checkFrame(t, m.View(), width, height)
 		if !strings.Contains(m.View(), "repo-5") {
 			t.Errorf("%dx%d: focused repo-5 is not on screen", width, height)
+		}
+	}
+}
+
+func Test_FocusNeverMovesTheLayout(t *testing.T) {
+	client := &fakeClient{users: map[string]models.User{"octocat": busyUser()}}
+	m, _ := send(New(client), tea.WindowSizeMsg{Width: 160, Height: 50})
+	m, res := lookup(t, m, "octocat")
+	m, _ = send(m, res)
+
+	// rowOf finds the screen row holding s
+	rowOf := func(view, s string) int {
+		for i, line := range strings.Split(view, "\n") {
+			if strings.Contains(ansi.Strip(line), s) {
+				return i
+			}
+		}
+		t.Fatalf("%q not on screen", s)
+		return -1
+	}
+	marks := []string{"Mona Octocat", "builds terminal tools", "contributions", "repo-0", "repo-5"}
+	before := map[string]int{}
+	for _, s := range marks {
+		before[s] = rowOf(m.View(), s)
+	}
+	for range len(busyUser().PinnedRepos) + 1 { // the profile, then every card
+		m, _ = send(m, keyRunes("j"))
+		for _, s := range marks {
+			if got := rowOf(m.View(), s); got != before[s] {
+				t.Fatalf("focus %d moved %q from row %d to %d", m.state.Focus, s, before[s], got)
+			}
 		}
 	}
 }

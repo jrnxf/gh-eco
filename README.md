@@ -62,6 +62,8 @@ to run:
 gh eco
 ```
 
+gh-eco follows your terminal's light or dark background; if it guesses wrong, set `GH_ECO_THEME=light` or `GH_ECO_THEME=dark`.
+
 to upgrade:
 
 ```sh

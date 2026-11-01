@@ -9,9 +9,12 @@ import "github.com/charmbracelet/lipgloss"
 var (
 	// Accent marks what has focus (5.05:1 on white).
 	Accent = lipgloss.AdaptiveColor{Light: "#8250DF", Dark: "#7D56F4"}
-	// Dim is for chrome that should recede, such as unfocused borders and
-	// separators (3.45:1 on white).
+	// Dim is for chrome that should recede, such as separators (3.45:1 on
+	// white).
 	Dim = lipgloss.AdaptiveColor{Light: "#818B98", Dark: "#484F58"}
+	// CardBorder outlines unfocused cards: GitHub's light border, pale on
+	// purpose (1.47:1 on white), so the focused card's border stands out.
+	CardBorder = lipgloss.AdaptiveColor{Light: "#D0D7DE", Dark: "#484F58"}
 	// mutedLight is secondary text on light backgrounds (6.11:1 on white).
 	mutedLight = lipgloss.Color("#59636E")
 	// Star is a starred repo's star (4.87:1 on white).
@@ -21,8 +24,7 @@ var (
 
 	Bold = lipgloss.NewStyle().Bold(true)
 	// FocusedName marks the profile name when it has focus: accent text,
-	// underlined, so the underline is accent too. lipgloss cannot color an
-	// underline on its own (SGR 58).
+	// underlined, so the underline is accent too.
 	FocusedName = Bold.Underline(true).Foreground(Accent)
 
 	roundedBorder = lipgloss.Border{
@@ -36,7 +38,8 @@ var (
 		BottomRight: "╯",
 	}
 
-	Frame        = lipgloss.NewStyle().Border(roundedBorder, true).Padding(0, 1).Margin(0, 1).BorderForeground(Dim)
+	// Frame outlines a card; a focused card's border turns accent.
+	Frame        = lipgloss.NewStyle().Border(roundedBorder, true).Padding(0, 1).Margin(0, 1).BorderForeground(CardBorder)
 	FocusedFrame = Frame.BorderForeground(Accent)
 
 	// HelpKey, HelpDesc and HelpSeparator style the help bar. The dark

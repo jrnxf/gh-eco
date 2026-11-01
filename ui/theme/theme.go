@@ -13,22 +13,32 @@ import (
 )
 
 // Detect settles the background lipgloss assumes, logging the evidence to
-// the debug log. It asks the terminal itself in every terminal: termenv
-// refuses to inside tmux or screen and then assumes dark.
+// the debug log. Without an override it asks the terminal itself in every
+// terminal: termenv refuses to inside tmux or screen and then assumes dark.
 func Detect() {
-	reply, ok := queryBackground()
-	if !ok {
-		// not a terminal: lipgloss renders without color anyway
-		return
+	override := os.Getenv("GH_ECO_THEME")
+	reply := ""
+	if _, set := parseOverride(override); !set {
+		var ok bool
+		if reply, ok = queryBackground(); !ok {
+			// not a terminal: lipgloss renders without color anyway
+			return
+		}
 	}
-	dark, why := decide(reply, os.Getenv("COLORFGBG"))
+	dark, why := decide(override, reply, os.Getenv("COLORFGBG"))
 	log.Printf("background: dark=%v (%s)", dark, why)
 	lipgloss.SetHasDarkBackground(dark)
 }
 
-// decide picks dark or light from, in order: the terminal's OSC 11 reply,
-// the COLORFGBG variable some terminals set, and a dark default.
-func decide(reply, colorFGBG string) (dark bool, why string) {
+// decide picks dark or light from, in order: GH_ECO_THEME (light or dark),
+// the terminal's OSC 11 reply, the COLORFGBG variable some terminals set,
+// and a dark default. The override exists for terminals that misreport
+// their background, such as herdr 0.9.3, which answers OSC 11 with a dark
+// color in a light pane.
+func decide(override, reply, colorFGBG string) (dark bool, why string) {
+	if dark, set := parseOverride(override); set {
+		return dark, "GH_ECO_THEME=" + override
+	}
 	if r, g, b, ok := parseOSC11(reply); ok {
 		return isDark(r, g, b), fmt.Sprintf("OSC 11 reply rgb %.2f/%.2f/%.2f", r, g, b)
 	}
@@ -72,6 +82,18 @@ func parseOSC11(s string) (r, g, b float64, ok bool) {
 		ch[k] = float64(v) / float64(uint64(1)<<(4*len(p))-1)
 	}
 	return ch[0], ch[1], ch[2], true
+}
+
+// parseOverride reads GH_ECO_THEME: "light" or "dark", anything else means
+// detect.
+func parseOverride(v string) (dark, set bool) {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "light":
+		return false, true
+	case "dark":
+		return true, true
+	}
+	return false, false
 }
 
 // parseColorFGBG reads the background index from "fg;bg" or
