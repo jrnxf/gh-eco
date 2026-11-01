@@ -59,6 +59,9 @@ type Model struct {
 	// it looks up while it is unanswered.
 	userReq      int
 	pendingLogin string
+	// restart is set while the pending lookup is a submitted search, whose
+	// profile becomes the new start of the trail and of history.
+	restart bool
 	// peopleReq identifies the latest followers or following page request;
 	// peoplePending is set while it is unanswered.
 	peopleReq     int
@@ -122,7 +125,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		if key.Matches(msg, m.keys.Quit) {
+		// esc in a search that can be cancelled leaves the search instead
+		cancel := s.Mode == state.InsertMode && s.LookedUp && key.Matches(msg, m.keys.Cancel)
+		if key.Matches(msg, m.keys.Quit) && !cancel {
 			return m, tea.Quit
 		}
 		if s.Mode == state.NormalMode {
@@ -136,6 +141,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case commands.SearchSubmitted:
 		cmds = append(cmds, m.lookup(msg.Login))
+		m.restart = true
 
 	case commands.GetUserResponse:
 		if msg.Req != m.userReq {
@@ -148,8 +154,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// applies
 		m.cancelReadme()
 		m.cancelPeople()
-		// backspace returns to the page this one replaces
-		s.Push()
+		if m.restart && msg.Err == nil {
+			// a searched profile starts over, so the trail shows exactly
+			// where backspace goes
+			s.History = nil
+		} else {
+			// backspace returns to the page this one replaces
+			s.Push()
+		}
+		m.restart = false
 		// a failed search clears the previous user, so nothing acts on it
 		s.User = msg.User
 		s.Focus = 0
@@ -244,6 +257,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *Model) lookup(login string) tea.Cmd {
 	m.userReq++
 	m.pendingLogin = login
+	m.restart = false
+	m.state.LookedUp = true
 	m.cancelReadme()
 	return tea.Batch(fetchUser(m.client, login, m.userReq), m.loading.Start(loadUser))
 }
@@ -269,6 +284,7 @@ func (m *Model) back() tea.Cmd {
 	if m.pendingLogin != "" {
 		m.userReq++
 		m.pendingLogin = ""
+		m.restart = false
 		m.loading.Stop(loadUser)
 		return nil
 	}
@@ -476,7 +492,12 @@ func (m Model) top() string {
 	if s.Mode == state.InsertMode || (s.User.Login == "" && m.pendingLogin == "") {
 		search = m.search.View()
 	}
-	return m.trail() + "\n" + search
+	trail := m.trail()
+	if trail != "" && search != "" {
+		// an empty row keeps the trail apart from the search line
+		return trail + "\n\n" + search
+	}
+	return trail + "\n" + search
 }
 
 // trail names the profiles hopped through, oldest first, ending in bold
@@ -490,11 +511,16 @@ func (m Model) trail() string {
 			logins = append(logins, login)
 		}
 	}
-	for _, p := range s.History {
-		add(p.User.Login)
+	if m.restart && m.pendingLogin != "" {
+		// a searched profile starts a new trail
+		add(m.pendingLogin)
+	} else {
+		for _, p := range s.History {
+			add(p.User.Login)
+		}
+		add(s.User.Login)
+		add(m.pendingLogin)
 	}
-	add(s.User.Login)
-	add(m.pendingLogin)
 	if len(logins) == 0 {
 		return ""
 	}

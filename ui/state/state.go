@@ -88,6 +88,9 @@ type State struct {
 	User        models.User
 	CurrentView View
 	Mode        Mode
+	// LookedUp is set once any profile was looked up. From then on a
+	// search can be cancelled, returning to what was on screen.
+	LookedUp bool
 	// Focus indexes Targets().
 	Focus int
 	// People is the list PeopleView shows.

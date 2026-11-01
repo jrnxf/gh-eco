@@ -55,6 +55,10 @@ func (m Model) collectHelpBindings() []key.Binding {
 	switch s.Mode {
 	case state.InsertMode:
 		bindings = append(bindings, k.Search)
+		if s.LookedUp {
+			// esc leaves the search; ctrl+c still quits
+			return append(bindings, k.Cancel)
+		}
 	case state.NormalMode:
 		if s.User.Login == "" {
 			// loading, or the search failed

@@ -624,8 +624,8 @@ func bottomRow(m Model) string {
 // topRows is the frame's first two rows, unstyled: the hop trail and the
 // search line.
 func topRows(m Model) (trail, search string) {
-	lines := strings.Split(ansi.Strip(m.View()), "\n")
-	return strings.TrimSpace(lines[0]), strings.TrimSpace(lines[1])
+	lines := strings.Split(ansi.Strip(m.top()), "\n")
+	return strings.TrimSpace(lines[0]), strings.TrimSpace(lines[len(lines)-1])
 }
 
 // spinnerShows reports whether label shows in the content area, the

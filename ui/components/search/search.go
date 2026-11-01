@@ -16,6 +16,9 @@ type Model struct {
 	keys      keys.KeyMap
 	textInput textinput.Model
 	state     *state.State
+	// prev is what the box held before the search being typed, which a
+	// cancelled search puts back.
+	prev string
 }
 
 func NewModel(s *state.State) Model {
@@ -48,9 +51,16 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 					func() tea.Msg { return commands.SearchSubmitted{Login: login} },
 				)
 			}
+			if key.Matches(msg, m.keys.Cancel) && m.state.LookedUp {
+				// back to what was on screen, as it was
+				m.state.Mode = state.NormalMode
+				m.textInput.SetValue(m.prev)
+				return m, m.textInput.Cursor.SetMode(cursor.CursorHide)
+			}
 
 		case state.NormalMode:
 			if key.Matches(msg, m.keys.FocusInput) && m.state.CurrentView != state.ReadmeView {
+				m.prev = m.textInput.Value()
 				m.textInput.Reset()
 				m.state.Mode = state.InsertMode
 				return m, m.textInput.Cursor.SetMode(cursor.CursorBlink)

@@ -18,6 +18,7 @@ type KeyMap struct {
 	OpenList        key.Binding
 	OpenProfile     key.Binding
 	Back            key.Binding
+	Cancel          key.Binding
 	Quit            key.Binding
 }
 
@@ -53,6 +54,10 @@ var Keys = KeyMap{
 	StarGhEco: key.NewBinding(
 		key.WithKeys("!"),
 		key.WithHelp("!", "star gh-eco"),
+	),
+	Cancel: key.NewBinding(
+		key.WithKeys("esc"),
+		key.WithHelp("esc", "cancel"),
 	),
 	Quit: key.NewBinding(
 		key.WithKeys("esc", "ctrl+c"),

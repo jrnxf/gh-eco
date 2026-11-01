@@ -333,8 +333,11 @@ func Test_TopReposAreLabelled(t *testing.T) {
 }
 
 func Test_StarLandsOnAPageInHistory(t *testing.T) {
+	cat := octocat()
+	cat.FollowersCount = 1
 	client := &fakeClient{
-		users:   map[string]models.User{"octocat": octocat(), "hubot": {Login: "hubot"}},
+		users:   map[string]models.User{"octocat": cat, "hubot": {Login: "hubot"}},
+		people:  map[string][]models.Person{"followers octocat": {{Login: "hubot"}}},
 		starErr: errors.New("boom"),
 	}
 	m := launch(t, client, "octocat", 160, 50)
@@ -342,11 +345,136 @@ func Test_StarLandsOnAPageInHistory(t *testing.T) {
 	m, msgs := send(m, keyRunes("s"))
 	failed := find[commands.StarResponse](t, msgs)
 
-	m, res := lookup(t, m, "hubot")
-	m, _ = send(m, res)
+	m = openList(t, m, state.FollowersTarget)
+	m, msgs = send(m, enter)
+	m, _ = send(m, find[commands.GetUserResponse](t, msgs))
 	m, _ = send(m, failed) // lands while octocat is in history
 	m, _ = send(m, backspace)
 	if r := m.state.Repo("A"); r == nil || r.ViewerHasStarred {
 		t.Errorf("failed star still shows after going back: %+v", r)
+	}
+}
+
+var esc = tea.KeyMsg{Type: tea.KeyEsc}
+
+// quits reports whether msg makes m quit.
+func quits(m Model, msg tea.Msg) bool {
+	_, cmd := m.Update(msg)
+	if cmd == nil {
+		return false
+	}
+	_, ok := cmd().(tea.QuitMsg)
+	return ok
+}
+
+func Test_EscLeavesASearchWithNothingLost(t *testing.T) {
+	client := &fakeClient{
+		users:  map[string]models.User{"alice": {Login: "alice", FollowersCount: 1}, "bob": {Login: "bob"}},
+		people: map[string][]models.Person{"followers alice": {{Login: "bob"}}},
+	}
+	m := launch(t, client, "alice", 80, 24)
+	m = openList(t, m, state.FollowersTarget)
+	m, msgs := send(m, enter)
+	m, _ = send(m, find[commands.GetUserResponse](t, msgs))
+
+	m, _ = send(m, keyRunes("/"))
+	m, _ = send(m, keyRunes("car"))
+	// the trail stays while a search is typed
+	if trail, search := topRows(m); trail != "alice › bob" || !strings.Contains(search, "car") {
+		t.Errorf("while typing the top rows are %q and %q", trail, search)
+	}
+	if quits(m, esc) {
+		t.Fatal("esc in a search quit")
+	}
+	m, _ = send(m, esc)
+	if m.state.Mode != state.NormalMode || m.state.User.Login != "bob" || m.state.CurrentView != state.UserView {
+		t.Errorf("esc left mode %v on %q in view %v", m.state.Mode, m.state.User.Login, m.state.CurrentView)
+	}
+	if trail, search := topRows(m); trail != "alice › bob" || search != "" {
+		t.Errorf("after esc the top rows are %q and %q", trail, search)
+	}
+	if len(client.calls) != 3 { // alice, her followers, bob
+		t.Errorf("esc made calls: %v", client.calls)
+	}
+
+	// backspace still retraces the hop, and esc quits outside a search
+	m, _ = send(m, backspace)
+	if m.state.User.Login != "alice" || m.state.CurrentView != state.PeopleView {
+		t.Errorf("backspace after esc shows %q in view %v", m.state.User.Login, m.state.CurrentView)
+	}
+	if !quits(m, esc) {
+		t.Error("esc outside a search does not quit")
+	}
+}
+
+func Test_EscQuitsTheSearchBoxAtLaunch(t *testing.T) {
+	m := newModel(t, &fakeClient{})
+	if !quits(m, esc) {
+		t.Error("esc in the launch search box does not quit")
+	}
+}
+
+func Test_SearchStartsANewTrail(t *testing.T) {
+	client := &fakeClient{
+		users:  map[string]models.User{"alice": {Login: "alice", FollowersCount: 1}, "bob": {Login: "bob"}, "carol": {Login: "carol"}},
+		people: map[string][]models.Person{"followers alice": {{Login: "bob"}}},
+	}
+	m := launch(t, client, "alice", 80, 24)
+	m = openList(t, m, state.FollowersTarget)
+	m, msgs := send(m, enter)
+	m, _ = send(m, find[commands.GetUserResponse](t, msgs))
+
+	m, carol := lookup(t, m, "carol")
+	// the trail shows where backspace goes once carol arrives: nowhere
+	if trail, _ := topRows(m); trail != "carol" {
+		t.Errorf("trail while carol loads is %q", trail)
+	}
+	m, _ = send(m, carol)
+	if trail, _ := topRows(m); trail != "carol" || len(m.state.History) != 0 {
+		t.Errorf("after the search the trail is %q with %d pages behind", trail, len(m.state.History))
+	}
+	m, _ = send(m, backspace)
+	if m.state.User.Login != "carol" || m.state.CurrentView != state.UserView {
+		t.Errorf("backspace from a searched profile shows %q in view %v", m.state.User.Login, m.state.CurrentView)
+	}
+}
+
+func Test_FailedSearchKeepsTheTrail(t *testing.T) {
+	client := &fakeClient{
+		users:  map[string]models.User{"alice": {Login: "alice", FollowersCount: 1}, "bob": {Login: "bob"}},
+		people: map[string][]models.Person{"followers alice": {{Login: "bob"}}},
+	}
+	m := launch(t, client, "alice", 80, 24)
+	m = openList(t, m, state.FollowersTarget)
+	m, msgs := send(m, enter)
+	m, _ = send(m, find[commands.GetUserResponse](t, msgs))
+
+	m, res := lookup(t, m, "nobody")
+	m, _ = send(m, res)
+	if trail, _ := topRows(m); trail != "alice › bob" {
+		t.Errorf("trail after a failed search is %q", trail)
+	}
+	// backspace still reaches every page from before the search
+	m, _ = send(m, backspace)
+	if m.state.User.Login != "bob" {
+		t.Errorf("backspace after a failed search shows %q", m.state.User.Login)
+	}
+}
+
+func Test_BackspaceCancelsASearchKeepingTheTrail(t *testing.T) {
+	client := &fakeClient{
+		users:  map[string]models.User{"alice": {Login: "alice", FollowersCount: 1}, "bob": {Login: "bob"}, "carol": {Login: "carol"}},
+		people: map[string][]models.Person{"followers alice": {{Login: "bob"}}},
+	}
+	m := launch(t, client, "alice", 80, 24)
+	m = openList(t, m, state.FollowersTarget)
+	m, msgs := send(m, enter)
+	m, _ = send(m, find[commands.GetUserResponse](t, msgs))
+
+	m, carol := lookup(t, m, "carol")
+	m, _ = send(m, backspace) // before carol arrives
+	m, _ = send(m, carol)
+	if trail, _ := topRows(m); m.state.User.Login != "bob" || trail != "alice › bob" {
+		t.Errorf("a cancelled search shows %q with trail %q", m.state.User.Login, trail)
 	}
 }
