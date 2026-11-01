@@ -40,3 +40,32 @@ func Test_Ellipsize(t *testing.T) {
 		t.Errorf("styled cut = %q", got)
 	}
 }
+
+func Test_Compact(t *testing.T) {
+	tests := []struct {
+		in   int
+		want string
+	}{
+		{0, "0"},
+		{842, "842"},
+		{999, "999"},
+		{1000, "1k"},
+		{1099, "1k"},
+		{1100, "1.1k"},
+		{1234, "1.2k"},
+		{21817, "21.8k"},
+		{312000, "312k"},
+		{999_899, "999.8k"},
+		{999_999, "999.9k"},
+		{1_000_000, "1m"},
+		{1_500_000, "1.5m"},
+		{1_999_999, "1.9m"},
+		{12_345_678, "12.3m"},
+		{-1234, "-1.2k"},
+	}
+	for _, tt := range tests {
+		if got := Compact(tt.in); got != tt.want {
+			t.Errorf("Compact(%d) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}

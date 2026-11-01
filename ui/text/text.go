@@ -39,3 +39,27 @@ func Count(n int) string {
 	}
 	return s
 }
+
+// Compact shortens a count for tight spots, GitHub style: 842, 1.2k, 21.8k,
+// 1.5m. It rounds down so a count never reads higher than it is, and drops a
+// trailing ".0".
+func Compact(n int) string {
+	switch {
+	case n < 0:
+		return "-" + Compact(-n)
+	case n < 1_000:
+		return strconv.Itoa(n)
+	case n < 1_000_000:
+		return tenths(n/100, "k")
+	default:
+		return tenths(n/100_000, "m")
+	}
+}
+
+// tenths renders t tenths of a unit, such as 218 as "21.8".
+func tenths(t int, suffix string) string {
+	if t%10 == 0 {
+		return strconv.Itoa(t/10) + suffix
+	}
+	return strconv.Itoa(t/10) + "." + strconv.Itoa(t%10) + suffix
+}

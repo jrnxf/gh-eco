@@ -91,7 +91,7 @@ func stats(r models.Repo) string {
 	if r.ViewerHasStarred {
 		star = lipgloss.NewStyle().Foreground(styles.Star).Render("⭑")
 	}
-	stars := fmt.Sprintf("%s %v", star, r.StarsCount)
+	stars := fmt.Sprintf("%s %s", star, text.Compact(r.StarsCount))
 	lang := r.PrimaryLanguage
 	if lang.Name == "" {
 		return stars
