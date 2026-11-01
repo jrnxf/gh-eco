@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/jrnxf/gh-eco/ui/commands"
 	"github.com/jrnxf/gh-eco/ui/keys"
 	"github.com/jrnxf/gh-eco/ui/state"
@@ -84,6 +85,13 @@ func (m *Model) SetLogin(login string) {
 	}
 }
 
-func (m Model) View() string {
+// View is the box on one row of at most width cells. A long search scrolls
+// to keep the cursor in sight.
+func (m Model) View(width int) string {
+	if v := m.textInput.View(); lipgloss.Width(v) <= width {
+		return v
+	}
+	// the prompt takes 2 cells and the cursor 1
+	m.textInput.Width = max(1, width-3)
 	return m.textInput.View()
 }

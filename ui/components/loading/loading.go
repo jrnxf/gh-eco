@@ -4,6 +4,7 @@ package loading
 
 import (
 	"slices"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -70,4 +71,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 // in a space, which separates the two.
 func (m Model) View(label string) string {
 	return m.spinner.View() + styles.Muted().Render(label)
+}
+
+// Spinner renders the spinner alone, one cell wide.
+func (m Model) Spinner() string {
+	return strings.TrimRight(m.spinner.View(), " ")
 }

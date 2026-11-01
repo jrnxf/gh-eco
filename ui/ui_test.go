@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"errors"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -621,17 +622,41 @@ func bottomRow(m Model) string {
 	return lines[len(lines)-1]
 }
 
-// topRows is the frame's first two rows, unstyled: the hop trail and the
-// search line.
+// spinnerGlyphs are the frames of the loading spinner.
+const spinnerGlyphs = "⣾⣽⣻⢿⡿⣟⣯⣷"
+
+// topRow is the frame's first row, unstyled.
+func topRow(m Model) string {
+	return strings.TrimRight(ansi.Strip(strings.Split(m.View(), "\n")[0]), " ")
+}
+
+// topRows splits the frame's first row into the hop trail and the search
+// box, whichever are showing. While a search is typed the trail sits
+// dimmed on the right of the box, set apart by a run of spaces.
 func topRows(m Model) (trail, search string) {
-	lines := strings.Split(ansi.Strip(m.top()), "\n")
-	return strings.TrimSpace(lines[0]), strings.TrimSpace(lines[len(lines)-1])
+	row := topRow(m)
+	if m.state.Mode == state.InsertMode || (m.state.User.Login == "" && m.pendingLogin == "") {
+		parts := regexp.MustCompile(` {2,}`).Split(row, 2)
+		if len(parts) == 2 {
+			return parts[1], parts[0]
+		}
+		return "", row
+	}
+	return strings.TrimRight(row, spinnerGlyphs+" "), ""
 }
 
 // spinnerShows reports whether label shows in the content area, the
 // spinner's place, rather than in the bottom row.
 func spinnerShows(m Model, label string) bool {
 	return strings.Contains(m.View(), label) && !strings.Contains(bottomRow(m), label)
+}
+
+// spinnerOnTop reports whether the top row ends in the spinner, with no
+// loading text drawn anywhere over the content.
+func spinnerOnTop(m Model) bool {
+	row := topRow(m)
+	return row != "" && strings.ContainsRune(spinnerGlyphs, []rune(row)[len([]rune(row))-1]) &&
+		!strings.Contains(m.View(), "loading")
 }
 
 func Test_SpinnerOnlyWhileTheNetworkIsBusy(t *testing.T) {
@@ -641,8 +666,8 @@ func Test_SpinnerOnlyWhileTheNetworkIsBusy(t *testing.T) {
 	}
 	m := newModel(t, client)
 	m, res := lookup(t, m, "octocat")
-	if !spinnerShows(m, "loading octocat…") {
-		t.Errorf("no spinner in place while searching:\n%s", m.View())
+	if !spinnerOnTop(m) {
+		t.Errorf("no spinner after the name while searching:\n%s", m.View())
 	}
 	m, _ = send(m, res)
 	if strings.Contains(m.View(), "loading") {
@@ -651,7 +676,7 @@ func Test_SpinnerOnlyWhileTheNetworkIsBusy(t *testing.T) {
 
 	m = focusRepo(t, m, "A")
 	m, msgs := send(m, keyRunes("r"))
-	if !spinnerShows(m, "loading readme…") || !strings.Contains(m.View(), "alpha") {
+	if !spinnerOnTop(m) || !strings.Contains(m.View(), "alpha") {
 		t.Errorf("no spinner over the dimmed profile while the readme loads:\n%s", m.View())
 	}
 	m, _ = send(m, find[commands.GetReadmeResponse](t, msgs))
@@ -820,7 +845,7 @@ func Test_BatchedKeysSwitchModeMidBatch(t *testing.T) {
 	if m.state.Mode != state.InsertMode {
 		t.Fatalf("mode = %v after batched /ab, want insert", m.state.Mode)
 	}
-	if view := m.search.View(); !strings.Contains(view, "ab") || strings.Contains(view, "x") {
+	if view := m.search.View(80); !strings.Contains(view, "ab") || strings.Contains(view, "x") {
 		t.Errorf("search view = %q, want the text typed after /", view)
 	}
 }
@@ -828,7 +853,7 @@ func Test_BatchedKeysSwitchModeMidBatch(t *testing.T) {
 func Test_BatchedTextInSearchStaysIntact(t *testing.T) {
 	m := newModel(t, &fakeClient{})
 	m, _ = send(m, keyRunes("jjjj"))
-	if view := m.search.View(); !strings.Contains(view, "jjjj") {
+	if view := m.search.View(80); !strings.Contains(view, "jjjj") {
 		t.Errorf("search view = %q, want jjjj typed once", view)
 	}
 }

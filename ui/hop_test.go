@@ -76,7 +76,7 @@ func Test_LaunchShowsTheLoginLoadingFromTheFirstFrame(t *testing.T) {
 	if trail, search := topRows(m); trail != "octocat" || search != "" {
 		t.Errorf("first frame top rows are %q and %q, want the trail and no search line", trail, search)
 	}
-	if !spinnerShows(m, "loading octocat…") {
+	if !spinnerOnTop(m) {
 		t.Errorf("first frame does not show octocat loading:\n%s", m.View())
 	}
 }
@@ -141,8 +141,8 @@ func Test_HopThroughFollowersAndBack(t *testing.T) {
 	if trail, search := topRows(m); trail != "alice › bob" || search != "" {
 		t.Errorf("while bob loads the top rows are %q and %q", trail, search)
 	}
-	if view := m.View(); !strings.Contains(view, "loading bob…") || !strings.Contains(view, "carol") || strings.Contains(bottomRow(m), "loading") {
-		t.Errorf("bob's spinner is not over the dimmed list:\n%s", view)
+	if view := m.View(); !spinnerOnTop(m) || !strings.Contains(view, "carol") {
+		t.Errorf("bob's spinner is not after his name over the dimmed list:\n%s", view)
 	}
 	m, _ = send(m, find[commands.GetUserResponse](t, msgs))
 	if m.state.User.Login != "bob" || m.state.CurrentView != state.UserView {
@@ -265,7 +265,7 @@ func Test_BackDropsAPendingReadme(t *testing.T) {
 	}
 	m, msgs = send(m, keyRunes("r"))
 	readme := find[commands.GetReadmeResponse](t, msgs)
-	if !spinnerShows(m, "loading readme…") {
+	if !spinnerOnTop(m) {
 		t.Fatalf("no readme spinner after r:\n%s", m.View())
 	}
 
@@ -602,5 +602,71 @@ func Test_BackspaceCancelsASearchKeepingTheTrail(t *testing.T) {
 	m, _ = send(m, carol)
 	if trail, _ := topRows(m); m.state.User.Login != "bob" || trail != "alice › bob" {
 		t.Errorf("a cancelled search shows %q with trail %q", m.state.User.Login, trail)
+	}
+}
+
+// contentRows is the frame under its top two rows and above the help bar.
+func contentRows(m Model) []string {
+	lines := strings.Split(ansi.Strip(m.View()), "\n")
+	return lines[2 : len(lines)-1]
+}
+
+func Test_SearchNeverMovesTheContent(t *testing.T) {
+	client := &fakeClient{
+		users:  map[string]models.User{"alice": {Login: "alice", FollowersCount: 1}, "bob": {Login: "bob"}},
+		people: map[string][]models.Person{"followers alice": {{Login: "bob"}}},
+	}
+	m := launch(t, client, "alice", 80, 24)
+	before := contentRows(m)
+	frame := len(strings.Split(m.View(), "\n"))
+
+	m, _ = send(m, keyRunes("/"))
+	if got := contentRows(m); strings.Join(got, "\n") != strings.Join(before, "\n") || len(strings.Split(m.View(), "\n")) != frame {
+		t.Errorf("/ moved the content:\n%s", m.View())
+	}
+	m, _ = send(m, esc)
+	if got := contentRows(m); strings.Join(got, "\n") != strings.Join(before, "\n") {
+		t.Errorf("esc moved the content:\n%s", m.View())
+	}
+
+	// the same on the list, and with the search already submitted
+	m = openList(t, m, state.FollowersTarget)
+	listRows := rowOf(m, "bob")
+	m, _ = send(m, keyRunes("/"))
+	if got := rowOf(m, "bob"); got != listRows {
+		t.Errorf("/ moved the list from row %d to %d", listRows, got)
+	}
+}
+
+func Test_ListFirstPageSpinnerIsOnTheTopRow(t *testing.T) {
+	client := &fakeClient{
+		users:  map[string]models.User{"alice": {Login: "alice", FollowersCount: 1}},
+		people: map[string][]models.Person{"followers alice": {{Login: "bob"}}},
+	}
+	m := launch(t, client, "alice", 80, 24)
+	for m.state.Focused().Kind != state.FollowersTarget {
+		m, _ = send(m, keyRunes("j"))
+	}
+	m, _ = send(m, enter)
+	if !spinnerOnTop(m) {
+		t.Errorf("no spinner on the top row while the first page loads:\n%s", m.View())
+	}
+}
+
+func Test_TypedSearchKeepsTheTrailOnOneNarrowLine(t *testing.T) {
+	client := &fakeClient{users: map[string]models.User{
+		"alice": {Login: "alice", FollowersCount: 1},
+	}}
+	m := launch(t, client, "alice", 80, 24)
+	// a long hop trail
+	for _, l := range []string{"bob-the-builder", "carol-of-the-bells", "dave-from-accounting", "erin-brockovich"} {
+		m.state.History = append(m.state.History, state.Page{User: models.User{Login: l}})
+	}
+	m, _ = send(m, keyRunes("/"))
+	m, _ = send(m, keyRunes("some-long-search-term"))
+	checkFrame(t, m.View(), 80, 24)
+	row := topRow(m)
+	if !strings.HasPrefix(row, "> some-long-search-term") || !strings.Contains(row, "…") || !strings.HasSuffix(row, "alice") {
+		t.Errorf("top row is not the search with a left-truncated trail: %q", row)
 	}
 }
