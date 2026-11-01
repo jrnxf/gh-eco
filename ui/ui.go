@@ -152,17 +152,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, m.back())
 				break
 			}
-			if m.readmePending && (m.acts(msg) || key.Matches(msg, m.keys.FocusInput)) {
-				// the user moved on: drop the pending readme, success or
-				// failure
+			readmeReq, userReq := m.readmeReq, m.userReq
+			cmd, acted := m.handleNormalKey(msg)
+			cmds = append(cmds, cmd)
+			// the latest key wins: one that acted on the dimmed page drops
+			// the load it did not replace itself; a key that did nothing
+			// keeps it
+			if acted && m.readmePending && m.readmeReq == readmeReq {
 				m.cancelReadme()
 			}
-			if m.pendingLogin != "" && m.acts(msg) {
-				// the latest key wins: it acts on the dimmed page at once,
-				// and the profile still loading is dropped
+			if acted && m.pendingLogin != "" && m.userReq == userReq {
 				m.cancelHop()
 			}
-			cmds = append(cmds, m.handleNormalKey(msg))
 		}
 
 	case commands.SearchSubmitted:
@@ -312,14 +313,6 @@ func (m *Model) cancelHop() {
 	m.loading.Stop(loadUser)
 }
 
-// acts reports whether msg is a key that acts on the page on screen, so
-// it overrides a load still pending; keys bound to nothing keep it.
-func (m Model) acts(msg tea.KeyMsg) bool {
-	k := m.keys
-	return key.Matches(msg, k.FocusNext, k.FocusPrev, k.PreviewPageDown, k.PreviewPageUp,
-		k.OpenList, k.OpenProfile, k.ToggleReadme, k.OpenGithub, k.StarRepo)
-}
-
 // canGoBack reports whether back has anything to undo: a load to drop, a
 // readme to close, or a page to return to.
 func (m Model) canGoBack() bool {
@@ -391,30 +384,33 @@ func (m *Model) morePeople() tea.Cmd {
 	return tea.Batch(fetch, m.loading.Start(loadPeople))
 }
 
-func (m *Model) handleNormalKey(msg tea.KeyMsg) tea.Cmd {
+// handleNormalKey acts on a key pressed on the page and reports whether
+// it did anything there. Starring gh-eco and focusing the search box do
+// not count: neither acts on the page.
+func (m *Model) handleNormalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	s := m.state
 	target := s.Focused()
 
 	switch {
 	case key.Matches(msg, m.keys.Back):
-		return m.back()
+		return m.back(), true
 
 	case key.Matches(msg, m.keys.OpenGithub):
 		if s.CurrentView == state.PeopleView {
 			if p := s.People.SelectedPerson(); p != nil {
-				return openURL(p.Url)
+				return openURL(p.Url), true
 			}
-			return nil
+			return nil, false
 		}
 		switch target.Kind {
 		case state.UserTarget:
-			return openURL(s.User.Url)
+			return openURL(s.User.Url), true
 		case state.FollowersTarget:
-			return openURL(s.User.Url + "?tab=followers")
+			return openURL(s.User.Url + "?tab=followers"), true
 		case state.FollowingTarget:
-			return openURL(s.User.Url + "?tab=following")
+			return openURL(s.User.Url + "?tab=following"), true
 		case state.RepoTarget:
-			return openURL(s.FocusedRepo().Url)
+			return openURL(s.FocusedRepo().Url), true
 		}
 
 	case key.Matches(msg, m.keys.StarRepo):
@@ -423,7 +419,7 @@ func (m *Model) handleNormalKey(msg tea.KeyMsg) tea.Cmd {
 			unstar := r.ViewerHasStarred
 			setStarred(r, !unstar)
 			m.starPending[r.Id] = true
-			return star(m.client, r.Id, unstar, unstar)
+			return star(m.client, r.Id, unstar, unstar), true
 		}
 
 	case key.Matches(msg, m.keys.StarGhEco):
@@ -441,40 +437,45 @@ func (m *Model) handleNormalKey(msg tea.KeyMsg) tea.Cmd {
 		return tea.Batch(
 			message.Show("tysm 🥹", 2),
 			star(m.client, github.GhEcoRepoID, false, prev),
-		)
+		), false
 
 	case key.Matches(msg, m.keys.ToggleReadme):
 		switch s.CurrentView {
 		case state.UserView:
 			switch target.Kind {
 			case state.UserTarget:
-				return m.openReadme(profileReadme(s.User))
+				return m.openReadme(profileReadme(s.User)), true
 			case state.RepoTarget:
 				r := s.FocusedRepo()
-				return m.openReadme(readmeRef{owner: r.Owner.Login, name: r.Name})
+				return m.openReadme(readmeRef{owner: r.Owner.Login, name: r.Name}), true
 			}
 		case state.ReadmeView:
 			s.CurrentView = state.UserView
+			return nil, true
 		}
 	}
 
 	switch s.CurrentView {
 	case state.UserView:
+		focus := s.Focus
 		switch {
 		case key.Matches(msg, m.keys.FocusNext):
 			s.FocusNext()
+			return nil, s.Focus != focus
 		case key.Matches(msg, m.keys.FocusPrev):
 			s.FocusPrev()
+			return nil, s.Focus != focus
 		case key.Matches(msg, m.keys.FocusInput):
 			s.Focus = 0
 		case key.Matches(msg, m.keys.OpenList) && target.Kind == state.FollowersTarget:
-			return m.openPeople(models.Followers)
+			return m.openPeople(models.Followers), true
 		case key.Matches(msg, m.keys.OpenList) && target.Kind == state.FollowingTarget:
-			return m.openPeople(models.Following)
+			return m.openPeople(models.Following), true
 		}
 
 	case state.PeopleView:
 		half := max(1, s.Layout.ContentHeight/2)
+		selected := s.People.Selected
 		switch {
 		case key.Matches(msg, m.keys.FocusNext):
 			s.People.Move(1)
@@ -486,12 +487,12 @@ func (m *Model) handleNormalKey(msg tea.KeyMsg) tea.Cmd {
 			s.People.Move(-half)
 		case key.Matches(msg, m.keys.OpenProfile):
 			if p := s.People.SelectedPerson(); p != nil {
-				return m.lookup(p.Login)
+				return m.lookup(p.Login), true
 			}
 		}
-		return m.morePeople()
+		return m.morePeople(), s.People.Selected != selected
 	}
-	return nil
+	return nil, false
 }
 
 // layout sizes the content area between the top rows and the help bar.

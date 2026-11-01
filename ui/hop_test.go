@@ -941,6 +941,36 @@ func Test_UnboundKeysKeepAPendingLoad(t *testing.T) {
 	}
 }
 
+func Test_InertKeysKeepAPendingHopFromAList(t *testing.T) {
+	client := hopFixture()
+	client.people["followers alice"] = []models.Person{{Login: "bob"}, {Login: "carol"}}
+	m := launch(t, client, "alice", 80, 24)
+	m = openList(t, m, state.FollowersTarget)
+	m, msgs := send(m, enter)
+	bob := find[commands.GetUserResponse](t, msgs)
+
+	// a list has no readme or repo, and k is already at the top
+	for _, k := range []tea.KeyMsg{keyRunes("x"), keyRunes("r"), keyRunes("s"), keyRunes("k")} {
+		m, _ = send(m, k)
+		if m.pendingLogin != "bob" || !spinnerOnTop(m) {
+			t.Fatalf("%q did nothing yet dropped the pending hop:\n%s", k.String(), m.View())
+		}
+	}
+
+	// j moves the selection, so it wins over the hop
+	m, _ = send(m, keyRunes("j"))
+	if m.pendingLogin != "" || m.loading.Visible() {
+		t.Errorf("j left the hop pending: %q", m.pendingLogin)
+	}
+	if p := m.state.People.SelectedPerson(); p == nil || p.Login != "carol" {
+		t.Errorf("j did not move the selection: %+v", p)
+	}
+	m, _ = send(m, bob)
+	if m.state.User.Login != "alice" || m.state.CurrentView != state.PeopleView {
+		t.Errorf("a dropped hop landed: %q in view %v", m.state.User.Login, m.state.CurrentView)
+	}
+}
+
 func Test_HelpOffersBackWheneverBackWorks(t *testing.T) {
 	// launched with a login: the first lookup can be dropped
 	client := hopFixture()
