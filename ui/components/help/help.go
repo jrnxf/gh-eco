@@ -4,22 +4,34 @@ import (
 	baseHelp "github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 
-	"github.com/jrnxf/gh-eco/ui/context"
-	"github.com/jrnxf/gh-eco/utils"
+	"github.com/jrnxf/gh-eco/ui/keys"
+	"github.com/jrnxf/gh-eco/ui/state"
+	"github.com/jrnxf/gh-eco/ui/styles"
 )
 
 type Model struct {
-	keys utils.KeyMap
-	help baseHelp.Model
-	ctx  *context.ProgramContext
+	keys  keys.KeyMap
+	help  baseHelp.Model
+	state *state.State
 }
 
-func NewModel() Model {
+func NewModel(s *state.State) Model {
 	return Model{
-		keys: utils.Keys,
-		help: baseHelp.NewModel(),
+		keys:  keys.Keys,
+		help:  newHelp(),
+		state: s,
 	}
+}
+
+func newHelp() baseHelp.Model {
+	h := baseHelp.New()
+	h.Styles.ShortKey = styles.HelpKey
+	h.Styles.ShortDesc = styles.HelpDesc
+	h.Styles.ShortSeparator = styles.HelpSeparator
+	h.Styles.Ellipsis = styles.HelpSeparator
+	return h
 }
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
@@ -32,28 +44,34 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
-	return m.help.ShortHelpView(m.collectHelpBindings())
+	// ShortHelpView can overflow its width when the ellipsis does not fit
+	return ansi.Truncate(m.help.ShortHelpView(m.collectHelpBindings()), m.help.Width, "…")
 }
 
 func (m Model) collectHelpBindings() []key.Binding {
 	k := m.keys
+	s := m.state
 	bindings := []key.Binding{}
-	switch m.ctx.Mode {
-	case context.InsertMode:
+	switch s.Mode {
+	case state.InsertMode:
 		bindings = append(bindings, k.Search)
-	case context.NormalMode:
-		if m.ctx.User.Login == "" {
-			// user has not yet loaded
-			bindings = append(bindings, k.Search)
+	case state.NormalMode:
+		if s.User.Login == "" {
+			// loading, or the search failed
+			bindings = append(bindings, k.FocusInput)
 		} else {
-			if m.ctx.CurrentView == context.UserView {
-				fw := m.ctx.CurrentFocus.FocusedWidget
+			if s.CurrentView == state.UserView {
 				bindings = append(bindings, k.FocusInput, k.FocusNext, k.FocusPrev, k.ToggleReadme, k.OpenGithub)
-				if fw.Type == context.RepoWidget {
+				if s.Focused().Kind == state.RepoTarget {
 					bindings = append(bindings, k.StarRepo)
 				}
-			} else if m.ctx.CurrentView == context.ReadmeView {
-				bindings = append(bindings, k.FocusNext, k.FocusPrev, k.PreviewPageDown, k.PreviewPageUp, k.ToggleReadme, k.StarRepo, k.OpenGithub)
+			} else if s.CurrentView == state.ReadmeView {
+				bindings = append(bindings, k.FocusNext, k.FocusPrev, k.PreviewPageDown, k.PreviewPageUp, k.ToggleReadme)
+				if s.Focused().Kind == state.RepoTarget {
+					// a profile readme has no repo to star
+					bindings = append(bindings, k.StarRepo)
+				}
+				bindings = append(bindings, k.OpenGithub)
 			}
 			bindings = append(bindings, k.StarGhEco)
 		}
@@ -61,12 +79,4 @@ func (m Model) collectHelpBindings() []key.Binding {
 	bindings = append(bindings, k.Quit)
 
 	return bindings
-
-}
-
-func (m *Model) UpdateProgramContext(ctx *context.ProgramContext) {
-	if ctx == nil {
-		return
-	}
-	m.ctx = ctx
 }

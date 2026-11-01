@@ -1,36 +1,42 @@
+// Package commands holds the messages exchanged between the root model and
+// its components.
 package commands
 
-import "github.com/jrnxf/gh-eco/ui/models"
-
-type FocusChange struct{}
-
-type LayoutChange struct{}
+import "github.com/jrnxf/gh-eco/models"
 
 type SetMessage struct {
 	Content          string
 	SecondsDisplayed int
 }
 
-type ProgramInitMsg struct {
-	Ready bool
+// SearchSubmitted asks the root model to look up Login.
+type SearchSubmitted struct {
+	Login string
 }
 
 type GetUserResponse struct {
-	Err  error
-	User models.User
+	// Req identifies the lookup; responses to superseded lookups are dropped.
+	Req   int
+	Login string
+	User  models.User
+	Err   error
 }
 
 type GetReadmeResponse struct {
+	// Req identifies the request; responses to superseded requests are dropped.
+	Req    int
+	Readme string
 	Err    error
-	Readme models.Blob
 }
 
-type StarStarrableResponse struct {
-	Err       error
+type StarResponse struct {
+	// Id is the starrable the toggle was for, set even when it failed.
+	Id string
+	// Unstar is true when the request removed a star.
+	Unstar bool
+	// Prev is whether the viewer had starred it before the toggle, which a
+	// failure restores.
+	Prev      bool
 	Starrable models.Starrable
-}
-
-type RemoveStarStarrableResponse struct {
 	Err       error
-	Starrable models.Starrable
 }

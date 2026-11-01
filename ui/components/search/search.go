@@ -1,119 +1,67 @@
 package search
 
 import (
-	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/jrnxf/gh-eco/api/github"
 	"github.com/jrnxf/gh-eco/ui/commands"
-	"github.com/jrnxf/gh-eco/ui/components/spinner"
-	"github.com/jrnxf/gh-eco/ui/context"
-	"github.com/jrnxf/gh-eco/utils"
+	"github.com/jrnxf/gh-eco/ui/keys"
+	"github.com/jrnxf/gh-eco/ui/state"
 )
 
 type Model struct {
-	keys      utils.KeyMap
+	keys      keys.KeyMap
 	textInput textinput.Model
-	spinner   spinner.Model
-	fetching  bool
-	err       error
-	ctx       *context.ProgramContext
+	state     *state.State
 }
 
-func NewModel() Model {
-	ti := textinput.NewModel()
+func NewModel(s *state.State) Model {
+	ti := textinput.New()
 	ti.Focus()
 	ti.Placeholder = "search by username"
 
 	return Model{
-		keys:      utils.Keys,
+		keys:      keys.Keys,
 		textInput: ti,
-		err:       nil,
-		fetching:  false,
-		spinner:   spinner.NewModel(),
+		state:     s,
 	}
 }
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
-	var (
-		cmd          tea.Cmd
-		spinnerCmd   tea.Cmd
-		textInputCmd tea.Cmd
-		getUserCmd   tea.Cmd
-
-		cmds []tea.Cmd
-	)
+	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
-
 	case tea.KeyMsg:
-		if key.Matches(msg, m.keys.Quit) {
-			cmd = tea.Quit
-		}
-
-		switch m.ctx.Mode {
-		case context.InsertMode:
-			cmds = append(cmds, textinput.Blink)
-
-			if key.Matches(msg, m.keys.Search) && strings.TrimSpace(m.textInput.Value()) != "" {
-				m.ctx.Mode = context.NormalMode
-				m.textInput.SetCursorMode(textinput.CursorHide)
-				getUserCmd = github.GetUser(m.textInput.Value())
-				m.fetching = true
-				cmds = append(cmds, m.spinner.Tick, getUserCmd)
+		switch m.state.Mode {
+		case state.InsertMode:
+			if login := strings.TrimSpace(m.textInput.Value()); key.Matches(msg, m.keys.Search) && login != "" {
+				m.state.Mode = state.NormalMode
+				cmds = append(cmds,
+					m.textInput.Cursor.SetMode(cursor.CursorHide),
+					func() tea.Msg { return commands.SearchSubmitted{Login: login} },
+				)
 			}
 
-		case context.NormalMode:
-			if key.Matches(msg, m.keys.FocusInput) {
-				if m.ctx.CurrentView == context.UserView {
-					m.textInput.Reset()
-					m.ctx.Mode = context.InsertMode
-					m.textInput.SetCursorMode(textinput.CursorBlink)
-					return m, textinput.Blink
-				}
+		case state.NormalMode:
+			if key.Matches(msg, m.keys.FocusInput) && m.state.CurrentView == state.UserView {
+				m.textInput.Reset()
+				m.state.Mode = state.InsertMode
+				return m, m.textInput.Cursor.SetMode(cursor.CursorBlink)
 			}
 		}
-
-	case commands.GetUserResponse:
-		m.fetching = false
 	}
 
-	if m.ctx.Mode == context.InsertMode {
-		m.textInput, textInputCmd = m.textInput.Update(msg)
+	var cmd tea.Cmd
+	if m.state.Mode == state.InsertMode {
+		m.textInput, cmd = m.textInput.Update(msg)
+		cmds = append(cmds, cmd)
 	}
-
-	if m.fetching {
-		// by not sending updates to it i effectively stop the spinner and cut useless
-		// re-renders in the top level update (in ui.go)
-		m.spinner, spinnerCmd = m.spinner.Update(msg)
-	}
-
-	cmds = append(cmds, cmd, spinnerCmd, textInputCmd)
 	return m, tea.Batch(cmds...)
 }
 
 func (m Model) View() string {
-	var b strings.Builder
-	w := b.WriteString
-
-	w(utils.GetNewLines(1))
-
-	if m.fetching {
-		w(fmt.Sprintf("%s%s", m.textInput.View(), m.spinner.View()))
-	} else {
-		w(m.textInput.View())
-	}
-
-	return lipgloss.NewStyle().Render(b.String())
-}
-
-func (m *Model) UpdateProgramContext(ctx *context.ProgramContext) {
-	if ctx == nil {
-		return
-	}
-	m.ctx = ctx
+	return "\n" + m.textInput.View()
 }

@@ -1,3 +1,4 @@
+// Package message shows short notices in place of the help bar.
 package message
 
 import (
@@ -6,83 +7,58 @@ import (
 	"github.com/charmbracelet/bubbles/timer"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/jrnxf/gh-eco/ui/commands"
-	"github.com/jrnxf/gh-eco/ui/context"
-	"github.com/jrnxf/gh-eco/utils"
+	"github.com/jrnxf/gh-eco/ui/state"
+	"github.com/jrnxf/gh-eco/ui/styles"
 )
 
+var style = lipgloss.NewStyle().Bold(true).Foreground(styles.Accent)
+
 type Model struct {
-	keys    utils.KeyMap
 	Content string
 	timer   timer.Model
-	ctx     *context.ProgramContext
+	state   *state.State
 }
 
-func NewModel() Model {
-	return Model{
-		keys: utils.Keys,
+func NewModel(s *state.State) Model {
+	return Model{state: s}
+}
+
+// Show displays content for the given number of seconds.
+func Show(content string, seconds int) tea.Cmd {
+	return func() tea.Msg {
+		return commands.SetMessage{Content: content, SecondsDisplayed: seconds}
 	}
 }
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
-
-	var (
-		cmd  tea.Cmd
-		cmds []tea.Cmd
-	)
 	switch msg := msg.(type) {
-
 	case commands.SetMessage:
-		if m.ctx.CurrentView != context.MessageView {
-			m.ctx.LastView = m.ctx.CurrentView
-		}
-		m.ctx.CurrentView = context.MessageView
 		m.Content = msg.Content
 		m.timer = timer.NewWithInterval(time.Second*time.Duration(msg.SecondsDisplayed), time.Second)
-		cmd = m.timer.Init()
+		return m, m.timer.Init()
 
-	case timer.TickMsg:
-		var cmd tea.Cmd
-		m.timer, cmd = m.timer.Update(msg)
-		return m, cmd
+	case tea.KeyMsg:
+		// a keypress means the notice has been seen
+		m.Content = ""
 
-	case timer.StartStopMsg:
+	case timer.TickMsg, timer.StartStopMsg:
 		var cmd tea.Cmd
 		m.timer, cmd = m.timer.Update(msg)
 		return m, cmd
 
 	case timer.TimeoutMsg:
-		m.ctx.CurrentView = m.ctx.LastView
-		m.ctx.LastView = context.VoidView
-		m.Content = ""
-	}
-
-	cmds = append(cmds, cmd)
-	return m, tea.Batch(cmds...)
-}
-
-func (m Model) View() string {
-
-	text := lipgloss.NewStyle().Width(m.ctx.Layout.ScreenWidth).PaddingTop(m.ctx.Layout.ScreenHeight / 2).Align(lipgloss.Center).Render(
-		// fmt.Sprintf("%s %s", m.Content, m.timer.View()),
-		m.Content,
-	)
-	return text
-}
-
-func (m *Model) UpdateProgramContext(ctx *context.ProgramContext) {
-	if ctx == nil {
-		return
-	}
-	m.ctx = ctx
-}
-
-func (m Model) TriggerMessage(content string, secondsDisplayed int) tea.Cmd {
-	return func() tea.Msg {
-		return commands.SetMessage{
-			Content:          content,
-			SecondsDisplayed: secondsDisplayed,
+		if msg.ID == m.timer.ID() {
+			m.Content = ""
 		}
 	}
+	return m, nil
+}
+
+// View renders the notice on one line, the height of the help bar it
+// replaces.
+func (m Model) View() string {
+	return style.Render(ansi.Truncate(m.Content, m.state.Layout.ScreenWidth, "…"))
 }

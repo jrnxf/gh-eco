@@ -9,6 +9,8 @@ Stars](https://img.shields.io/github/stars/jrnxf/gh-eco)](https://github.com/jrn
 
 ![demo](https://github.com/jrnxf/assets/raw/main/gh-eco/demo.gif)
 
+_Regenerate it with [vhs](https://github.com/charmbracelet/vhs) and ffmpeg: `./demo.sh`._
+
 ## Installation
 
 1. Install the `gh` cli - see the [installation](https://github.com/cli/cli#installation)
@@ -62,6 +64,8 @@ to run:
 gh eco
 ```
 
+gh-eco follows your terminal's light or dark background; if it guesses wrong, set `GH_ECO_THEME=light` or `GH_ECO_THEME=dark`.
+
 to upgrade:
 
 ```sh
@@ -101,20 +105,10 @@ Other interactions I think would be nice include:
   status, etc). These are easy to display but I'm intentionally keeping things lightweight for now
 - trending users, repos, etc.
 
-**🧪 Tests**
-
-To date only a small amount of tests have been written. I feel comfortable writing tests for smaller
-utility functions, but I'd love to do more integration type testing on the underlying [Bubble
-Tea](https://github.com/charmbracelet/bubbletea) implementation. If you have any experience with
-this please feel free to open an issue / pull request and start the discussion!
-
 ## Limitations
 
-- Misalignment can occur when emojis are present. Since emoji widths vary, I don't believe there is
-  any way to deal with this. Definitely reach out if you have any ideas.
-
-- Smaller terminal screens will almost definitely cause rendering issues. For `gh-eco` to work
-  properly make sure to give your terminal as much screen real estate as possible!
+- Some emoji are drawn at different widths by different terminals, so a card border next to one
+  can sit a cell or two off.
 
 ## Contributing
 

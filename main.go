@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jrnxf/gh-eco/api/github"
 	"github.com/jrnxf/gh-eco/ui"
+	"github.com/jrnxf/gh-eco/ui/theme"
 )
 
 func main() {
@@ -23,13 +24,17 @@ func main() {
 		log.SetOutput(io.Discard)
 	}
 
-	if _, err := github.GetClient(); err != nil {
-		fmt.Fprintln(os.Stderr, "gh-eco requires GitHub CLI authentication — run `gh auth login` and try again.")
+	// before anything renders, so adaptive colors match the terminal
+	theme.Detect()
+
+	client, err := github.NewClient()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "gh-eco requires GitHub CLI authentication: run `gh auth login` and try again.")
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 
-	p := tea.NewProgram(ui.New(), tea.WithAltScreen(), tea.WithMouseAllMotion())
+	p := tea.NewProgram(ui.New(client), tea.WithAltScreen(), tea.WithMouseCellMotion())
 
 	if _, err := p.Run(); err != nil {
 		log.Fatal(err)

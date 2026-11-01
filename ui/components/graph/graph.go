@@ -4,18 +4,30 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/jrnxf/gh-eco/ui/models"
-	"github.com/jrnxf/gh-eco/utils"
+	"github.com/jrnxf/gh-eco/models"
 )
 
-var (
-	GH_GRAPH_CELL                 = "■"
-	GH_GRAPH_CELL_NONE            = lipgloss.NewStyle().PaddingRight(1).Foreground(lipgloss.AdaptiveColor{Light: "#EBEDF0", Dark: "#2D333B"}).Render(GH_GRAPH_CELL)
-	GH_GRAPH_CELL_FIRST_QUARTILE  = lipgloss.NewStyle().PaddingRight(1).Foreground(lipgloss.AdaptiveColor{Light: "#9BE9A8", Dark: "#0E4429"}).Render(GH_GRAPH_CELL)
-	GH_GRAPH_CELL_SECOND_QUARTILE = lipgloss.NewStyle().PaddingRight(1).Foreground(lipgloss.AdaptiveColor{Light: "#40C463", Dark: "#006D32"}).Render(GH_GRAPH_CELL)
-	GH_GRAPH_CELL_THIRD_QUARTILE  = lipgloss.NewStyle().PaddingRight(1).Foreground(lipgloss.AdaptiveColor{Light: "#30A14E", Dark: "#26A641"}).Render(GH_GRAPH_CELL)
-	GH_GRAPH_CELL_FOURTH_QUARTILE = lipgloss.NewStyle().PaddingRight(1).Foreground(lipgloss.AdaptiveColor{Light: "#216E39", Dark: "#39D353"}).Render(GH_GRAPH_CELL)
-)
+const cell = "■"
+
+// levels maps a contribution level to its color: GitHub's ramps for light
+// and dark backgrounds.
+var levels = map[string]lipgloss.AdaptiveColor{
+	"NONE":            {Light: "#EBEDF0", Dark: "#2D333B"},
+	"FIRST_QUARTILE":  {Light: "#9BE9A8", Dark: "#0E4429"},
+	"SECOND_QUARTILE": {Light: "#40C463", Dark: "#006D32"},
+	"THIRD_QUARTILE":  {Light: "#30A14E", Dark: "#26A641"},
+	"FOURTH_QUARTILE": {Light: "#216E39", Dark: "#39D353"},
+}
+
+// cells renders one cell per level. It runs at render time rather than at
+// package init, which happens before the terminal background is known.
+func cells() map[string]string {
+	out := make(map[string]string, len(levels))
+	for level, color := range levels {
+		out[level] = lipgloss.NewStyle().PaddingRight(1).Foreground(color).Render(cell)
+	}
+	return out
+}
 
 func BuildGraphDisplay(weeklyContributions []models.WeeklyContribution) string {
 	if len(weeklyContributions) == 0 {
@@ -26,7 +38,7 @@ func BuildGraphDisplay(weeklyContributions []models.WeeklyContribution) string {
 	// unfilled cells stay "" and render as blanks
 	maxDays := 0
 	for _, week := range weeklyContributions {
-		maxDays = utils.MaxInt(maxDays, len(week.ContributionDays))
+		maxDays = max(maxDays, len(week.ContributionDays))
 	}
 	if maxDays == 0 {
 		return ""
@@ -69,26 +81,12 @@ func transposeSlice(slice [][]string) [][]string {
 
 func generateContributionGraph(slice [][]string) string {
 	var b strings.Builder
-	w := b.WriteString
-
+	rendered := cells()
 	for _, row := range slice {
-		for _, cell := range row {
-			switch cell {
-			case "NONE":
-				w(GH_GRAPH_CELL_NONE)
-			case "FIRST_QUARTILE":
-				w(GH_GRAPH_CELL_FIRST_QUARTILE)
-			case "SECOND_QUARTILE":
-				w(GH_GRAPH_CELL_SECOND_QUARTILE)
-			case "THIRD_QUARTILE":
-				w(GH_GRAPH_CELL_THIRD_QUARTILE)
-			case "FOURTH_QUARTILE":
-				w(GH_GRAPH_CELL_FOURTH_QUARTILE)
-			}
+		for _, level := range row {
+			b.WriteString(rendered[level])
 		}
-
-		w(utils.GetNewLines(1))
+		b.WriteString("\n")
 	}
-
 	return b.String()
 }
