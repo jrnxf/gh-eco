@@ -14,6 +14,8 @@ import (
 	"testing"
 
 	"github.com/cli/go-gh/v2/pkg/api"
+
+	"github.com/jrnxf/gh-eco/models"
 )
 
 // fakeGitHub serves canned responses and records every request it gets.
@@ -95,7 +97,7 @@ func newFake(t *testing.T, fake *fakeGitHub) *Client {
 	return c
 }
 
-const ownerQuery = `query GetOwner($first:Int!$login:String!){repositoryOwner(login: $login){__typename,... on User{login,name,location,url,bio,twitterUsername,isViewer,isFollowingViewer,viewerIsFollowing,websiteUrl,followers{totalCount},following{totalCount},pinnedItems(first: $first, types: [REPOSITORY]){nodes{... on Repository{id,name,description,stargazerCount,viewerHasStarred,url,owner{login},primaryLanguage{name,color}}}},contributionsCollection{contributionCalendar{totalContributions,weeks{contributionDays{contributionLevel}}}}},... on Organization{login,name,location,url,description,twitterUsername,websiteUrl,pinnedItems(first: $first, types: [REPOSITORY]){nodes{... on Repository{id,name,description,stargazerCount,viewerHasStarred,url,owner{login},primaryLanguage{name,color}}}}}}}`
+const ownerQuery = `query GetOwner($first:Int!$login:String!){repositoryOwner(login: $login){__typename,... on User{login,name,location,url,bio,twitterUsername,isViewer,isFollowingViewer,viewerIsFollowing,websiteUrl,followers{totalCount},following{totalCount},pinnedItems(first: $first, types: [REPOSITORY]){nodes{... on Repository{id,name,description,stargazerCount,viewerHasStarred,url,owner{login},primaryLanguage{name,color}}}},repositories(first: $first, privacy: PUBLIC, isFork: false, ownerAffiliations: [OWNER], orderBy: {field: STARGAZERS, direction: DESC}){nodes{id,name,description,stargazerCount,viewerHasStarred,url,owner{login},primaryLanguage{name,color}}},contributionsCollection{contributionCalendar{totalContributions,weeks{contributionDays{contributionLevel}}}}},... on Organization{login,name,location,url,description,twitterUsername,websiteUrl,pinnedItems(first: $first, types: [REPOSITORY]){nodes{... on Repository{id,name,description,stargazerCount,viewerHasStarred,url,owner{login},primaryLanguage{name,color}}}},repositories(first: $first, privacy: PUBLIC, isFork: false, ownerAffiliations: [OWNER], orderBy: {field: STARGAZERS, direction: DESC}){nodes{id,name,description,stargazerCount,viewerHasStarred,url,owner{login},primaryLanguage{name,color}}}}}}`
 
 // userResponse is shaped like a real response: a pinned gist matches no
 // fragment and arrives as an empty object, and a repo can lack a language.
@@ -110,6 +112,10 @@ const userResponse = `{"data":{"repositoryOwner":{
     {},
     {"id":"R_2","name":"notes","description":"","stargazerCount":0,"viewerHasStarred":false,
      "url":"https://github.com/octocat/notes","owner":{"login":"octocat"},"primaryLanguage":null}
+  ]},
+  "repositories":{"nodes":[
+    {"id":"R_3","name":"popular","description":"","stargazerCount":900,"viewerHasStarred":false,
+     "url":"https://github.com/octocat/popular","owner":{"login":"octocat"},"primaryLanguage":null}
   ]},
   "contributionsCollection":{"contributionCalendar":{"totalContributions":42,"weeks":[
     {"contributionDays":[{"contributionLevel":"NONE"},{"contributionLevel":"FOURTH_QUARTILE"}]}
@@ -136,10 +142,10 @@ func Test_UserLookupContract(t *testing.T) {
 	if u.Login != "octocat" || u.Name != "Mona" || u.FollowersCount != 12 || !u.IsFollowingViewer {
 		t.Errorf("profile mapped wrong: %+v", u)
 	}
-	if len(u.PinnedRepos) != 2 || u.PinnedRepos[0].Id != "R_1" || u.PinnedRepos[1].Id != "R_2" {
-		t.Fatalf("pinned repos = %+v, want hello-world and notes without the gist", u.PinnedRepos)
+	if len(u.Repos) != 2 || u.Repos[0].Id != "R_1" || u.Repos[1].Id != "R_2" || u.TopRepos {
+		t.Fatalf("repos = %+v, top = %v; want the pins hello-world and notes without the gist", u.Repos, u.TopRepos)
 	}
-	if r := u.PinnedRepos[0]; r.Owner.Login != "octocat" || r.PrimaryLanguage.Name != "Go" || !r.ViewerHasStarred || r.StarsCount != 5 {
+	if r := u.Repos[0]; r.Owner.Login != "octocat" || r.PrimaryLanguage.Name != "Go" || !r.ViewerHasStarred || r.StarsCount != 5 {
 		t.Errorf("repo mapped wrong: %+v", r)
 	}
 	if u.ActivityGraph.ContributionsCount != 42 || len(u.ActivityGraph.Weeks) != 1 ||
@@ -164,8 +170,94 @@ func Test_OrganizationLookup(t *testing.T) {
 	if !u.IsOrganization || u.Login != "acme" || u.Bio != "we make things" || u.TwitterUsername != "acme" {
 		t.Errorf("organization mapped wrong: %+v", u)
 	}
-	if len(u.PinnedRepos) != 1 || u.PinnedRepos[0].Name != "anvil" {
-		t.Errorf("pinned repos = %+v", u.PinnedRepos)
+	if len(u.Repos) != 1 || u.Repos[0].Name != "anvil" {
+		t.Errorf("pinned repos = %+v", u.Repos)
+	}
+}
+
+func Test_TopReposWhenNothingIsPinned(t *testing.T) {
+	// only a pinned gist, which the Repository fragment leaves empty
+	fake := &fakeGitHub{graphql: map[string]string{"GetOwner": `{"data":{"repositoryOwner":{
+	  "__typename":"User","login":"octocat","followers":{"totalCount":0},"following":{"totalCount":0},
+	  "pinnedItems":{"nodes":[{}]},
+	  "repositories":{"nodes":[
+	    {"id":"R_7","name":"famous","description":"","stargazerCount":900,"viewerHasStarred":false,
+	     "url":"https://github.com/octocat/famous","owner":{"login":"octocat"},"primaryLanguage":null},
+	    {"id":"R_8","name":"known","description":"","stargazerCount":40,"viewerHasStarred":true,
+	     "url":"https://github.com/octocat/known","owner":{"login":"octocat"},"primaryLanguage":null}
+	  ]},
+	  "contributionsCollection":{"contributionCalendar":{"totalContributions":0,"weeks":[]}}
+	}}}`}}
+	c := newFake(t, fake)
+
+	u, err := c.User(context.Background(), "octocat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !u.TopRepos || len(u.Repos) != 2 || u.Repos[0].Name != "famous" || u.Repos[1].StarsCount != 40 || !u.Repos[1].ViewerHasStarred {
+		t.Errorf("repos = %+v, top = %v; want famous then known, marked as top repos", u.Repos, u.TopRepos)
+	}
+}
+
+func Test_NoReposAtAll(t *testing.T) {
+	fake := &fakeGitHub{graphql: map[string]string{"GetOwner": `{"data":{"repositoryOwner":{
+	  "__typename":"Organization","login":"acme","pinnedItems":{"nodes":[]},"repositories":{"nodes":[]}}}}`}}
+	c := newFake(t, fake)
+
+	u, err := c.User(context.Background(), "acme")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(u.Repos) != 0 || u.TopRepos {
+		t.Errorf("repos = %+v, top = %v; want none, not labelled as top repos", u.Repos, u.TopRepos)
+	}
+}
+
+func Test_PeopleContract(t *testing.T) {
+	page := func(logins ...string) string {
+		var nodes []string
+		for _, l := range logins {
+			nodes = append(nodes, `{"login":"`+l+`","name":"","url":"https://github.com/`+l+`"}`)
+		}
+		return `"totalCount":3,"pageInfo":{"hasNextPage":true,"endCursor":"CUR"},"nodes":[` + strings.Join(nodes, ",") + `]`
+	}
+	fake := &fakeGitHub{graphql: map[string]string{
+		"GetFollowers": `{"data":{"user":{"followers":{` + page("alice", "bob") + `}}}}`,
+		"GetFollowing": `{"data":{"user":{"following":{` + page("carol") + `}}}}`,
+	}}
+	c := newFake(t, fake)
+
+	followers, err := c.People(context.Background(), "octocat", models.Followers, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(followers.People) != 2 || followers.People[1].Login != "bob" || followers.People[1].Url != "https://github.com/bob" || followers.TotalCount != 3 ||
+		!followers.HasNextPage || followers.EndCursor != "CUR" {
+		t.Errorf("followers page mapped wrong: %+v", followers)
+	}
+	following, err := c.People(context.Background(), "octocat", models.Following, "CUR")
+	if err != nil || len(following.People) != 1 || following.People[0].Login != "carol" {
+		t.Errorf("following page = %+v, %v", following, err)
+	}
+
+	want := []string{
+		`query GetFollowers($after:String$first:Int!$login:String!){user(login: $login){followers(first: $first, after: $after){totalCount,pageInfo{hasNextPage,endCursor},nodes{login,name,url}}}}`,
+		`query GetFollowing($after:String$first:Int!$login:String!){user(login: $login){following(first: $first, after: $after){totalCount,pageInfo{hasNextPage,endCursor},nodes{login,name,url}}}}`,
+	}
+	for i, req := range fake.requests {
+		if req.query != want[i] {
+			t.Errorf("query %d changed:\n got %s\nwant %s", i, req.query, want[i])
+		}
+		if req.variables["login"] != "octocat" || req.variables["first"] != float64(50) {
+			t.Errorf("query %d variables = %v", i, req.variables)
+		}
+	}
+	// the first page sends a null cursor, later pages the previous end
+	if after, ok := fake.requests[0].variables["after"]; !ok || after != nil {
+		t.Errorf("first page after = %v (sent %v), want null", after, ok)
+	}
+	if fake.requests[1].variables["after"] != "CUR" {
+		t.Errorf("next page after = %v, want CUR", fake.requests[1].variables["after"])
 	}
 }
 

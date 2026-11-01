@@ -22,6 +22,13 @@ type GetUserResponse struct {
 	Err   error
 }
 
+type GetPeopleResponse struct {
+	// Req identifies the request; responses to superseded requests are dropped.
+	Req  int
+	Page models.PeoplePage
+	Err  error
+}
+
 type GetReadmeResponse struct {
 	// Req identifies the request; responses to superseded requests are dropped.
 	Req    int

@@ -15,7 +15,7 @@ func Test_MapUserSkipsNonRepositoryPins(t *testing.T) {
 	// Nodes[1] is a pinned gist, which decodes as an empty Repository
 
 	u := mapUser(q)
-	if len(u.PinnedRepos) != 1 || u.PinnedRepos[0].Id != "R_1" {
-		t.Fatalf("pinned repos = %+v, want only hello-world", u.PinnedRepos)
+	if len(u.Repos) != 1 || u.Repos[0].Id != "R_1" {
+		t.Fatalf("pinned repos = %+v, want only hello-world", u.Repos)
 	}
 }

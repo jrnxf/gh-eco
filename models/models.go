@@ -15,8 +15,11 @@ type User struct {
 	IsViewer          bool
 	IsFollowingViewer bool
 	ViewerIsFollowing bool
-	PinnedRepos       []Repo
-	ActivityGraph     struct {
+	// Repos are the pinned repositories or, when nothing is pinned and
+	// TopRepos is set, the most-starred ones.
+	Repos         []Repo
+	TopRepos      bool
+	ActivityGraph struct {
 		ContributionsCount int
 		Weeks              []WeeklyContribution
 	}
@@ -48,4 +51,28 @@ type Starrable struct {
 	Id               string
 	StargazerCount   int
 	ViewerHasStarred bool
+}
+
+// PeopleKind picks a user's followers or the people they follow.
+type PeopleKind int
+
+const (
+	Followers PeopleKind = iota
+	Following
+)
+
+// Person is one entry of a followers or following list.
+type Person struct {
+	Login string
+	Name  string
+	Url   string
+}
+
+// PeoplePage is one page of a followers or following list. EndCursor
+// continues the list when HasNextPage is set.
+type PeoplePage struct {
+	People      []Person
+	TotalCount  int
+	HasNextPage bool
+	EndCursor   string
 }

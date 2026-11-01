@@ -18,22 +18,20 @@ Hide
 Type "go build -o gh-eco . && clear"
 Enter
 Wait@3m
-Type "GH_ECO_THEME=dark ./gh-eco"
+Type "GH_ECO_THEME=dark ./gh-eco jrnxf"
 Enter
-Sleep 1s
-Show
 
-# own profile; network waits happen off camera
-Type "jrnxf"
-Sleep 200ms
-Enter
-Sleep 150ms
-Hide
+# the profile named on launch; network waits happen off camera
 Wait+Screen /contributions/
 Show
 Sleep 700ms
 
-# the gh-eco card, its readme, a little scroll, back
+# past the follower counts to the gh-eco card, its readme, a little
+# scroll, back
+Type "j"
+Sleep 400ms
+Type "j"
+Sleep 400ms
 Type "j"
 Sleep 400ms
 Type "j"
