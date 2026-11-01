@@ -86,10 +86,7 @@ func (m Model) collectHelpBindings() []key.Binding {
 			case state.PeopleView:
 				bindings = append(bindings, k.FocusNext, k.FocusPrev, k.OpenProfile, k.Back, k.OpenGithub, k.FocusInput)
 			case state.ReadmeView:
-				bindings = append(bindings, k.FocusNext, k.FocusPrev, k.PreviewPageDown, k.PreviewPageUp, k.ToggleReadme)
-				if len(s.History) > 0 {
-					bindings = append(bindings, k.Back)
-				}
+				bindings = append(bindings, k.FocusNext, k.FocusPrev, k.PreviewPageDown, k.PreviewPageUp, k.ToggleReadme, k.Back)
 				if s.Focused().Kind == state.RepoTarget {
 					// a profile readme has no repo to star
 					bindings = append(bindings, k.StarRepo)

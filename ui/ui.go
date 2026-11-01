@@ -305,6 +305,11 @@ func (m *Model) back() tea.Cmd {
 		return nil
 	}
 	s := m.state
+	if s.CurrentView == state.ReadmeView {
+		// the readme is a layer over its profile: backspace closes only it
+		s.CurrentView = state.UserView
+		return nil
+	}
 	if !s.Pop() {
 		return nil
 	}

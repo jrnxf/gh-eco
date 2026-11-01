@@ -695,3 +695,44 @@ func Test_LongSearchStaysOnTheTopLine(t *testing.T) {
 		t.Errorf("moving the cursor in a long search moved the content:\n%s", m.View())
 	}
 }
+
+// profileWithRepo is a profile whose repo has a readme.
+func profileWithRepo(login string) models.User {
+	return models.User{
+		Login: login, Url: "https://github.com/" + login, FollowersCount: 1,
+		Repos: []models.Repo{{Id: login + "-repo", Name: "alpha", Owner: struct{ Login string }{login}}},
+	}
+}
+
+func Test_BackspaceInAReadmeClosesOnlyTheReadme(t *testing.T) {
+	client := &fakeClient{
+		users:   map[string]models.User{"alice": profileWithRepo("alice"), "bob": profileWithRepo("bob")},
+		readmes: map[string]string{"bob/alpha": "# bob readme"},
+		people:  map[string][]models.Person{"followers alice": {{Login: "bob"}}},
+	}
+	m := launch(t, client, "alice", 80, 24)
+	m = openList(t, m, state.FollowersTarget)
+	m, msgs := send(m, enter)
+	m, _ = send(m, find[commands.GetUserResponse](t, msgs))
+	m = focusRepo(t, m, "bob-repo")
+	m, msgs = send(m, keyRunes("r"))
+	m, _ = send(m, find[commands.GetReadmeResponse](t, msgs))
+	if m.state.CurrentView != state.ReadmeView {
+		t.Fatalf("readme did not open")
+	}
+	history := len(m.state.History)
+
+	m, _ = send(m, backspace)
+	if m.state.CurrentView != state.UserView || m.state.User.Login != "bob" || len(m.state.History) != history {
+		t.Errorf("backspace in a readme left view %v on %q with %d pages of history, want bob's profile with %d",
+			m.state.CurrentView, m.state.User.Login, len(m.state.History), history)
+	}
+	if trail, _ := topRows(m); trail != "alice › bob" {
+		t.Errorf("trail after closing the readme is %q", trail)
+	}
+	// the next backspace is the page back
+	m, _ = send(m, backspace)
+	if m.state.CurrentView != state.PeopleView {
+		t.Errorf("second backspace shows view %v, want the list", m.state.CurrentView)
+	}
+}

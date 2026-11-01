@@ -84,7 +84,7 @@ gh extension upgrade eco
 | --- | --- |
 | `/` | focus input / search |
 | `enter` | search / open list / open profile |
-| `backspace` | back to the previous page |
+| `backspace` | close the readme, or go back to the previous page |
 | `j` / `↓` | move down |
 | `k` / `↑` | move up |
 | `ctrl+d` | page down (readme, list) |
