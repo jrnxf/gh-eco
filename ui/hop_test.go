@@ -259,6 +259,10 @@ func Test_BackDropsAPendingReadme(t *testing.T) {
 	m = openList(t, m, state.FollowersTarget)
 	m, msgs := send(m, enter)
 	m, _ = send(m, find[commands.GetUserResponse](t, msgs))
+	// r opens the profile readme from the focused name
+	for m.state.Focused().Kind != state.UserTarget {
+		m, _ = send(m, keyRunes("j"))
+	}
 	m, msgs = send(m, keyRunes("r"))
 	readme := find[commands.GetReadmeResponse](t, msgs)
 	if !spinnerShows(m, "loading readme…") {
