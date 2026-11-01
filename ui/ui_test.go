@@ -792,3 +792,43 @@ func Test_ReadmeHelpOffersStarOnlyForRepos(t *testing.T) {
 		t.Errorf("repo readme does not offer to star it: %q", bottomRow(m))
 	}
 }
+
+func Test_BatchedKeysActAsSeparatePresses(t *testing.T) {
+	client := &fakeClient{users: map[string]models.User{"octocat": octocat()}}
+	m := newModel(t, client)
+	m, res := lookup(t, m, "octocat")
+	m, _ = send(m, res)
+
+	m, _ = send(m, keyRunes("jjj"))
+	if m.state.Focus != 3 {
+		t.Errorf("focus = %d after batched jjj, want 3", m.state.Focus)
+	}
+	m, _ = send(m, keyRunes("kk"))
+	if m.state.Focus != 1 {
+		t.Errorf("focus = %d after batched kk, want 1", m.state.Focus)
+	}
+}
+
+func Test_BatchedKeysSwitchModeMidBatch(t *testing.T) {
+	m := newModel(t, &fakeClient{})
+	m, _ = send(m, keyRunes("x"))
+	m, _ = send(m, enter) // no login yet: stays in insert mode
+	m.state.Mode = state.NormalMode
+	m.state.CurrentView = state.UserView
+
+	m, _ = send(m, keyRunes("/ab"))
+	if m.state.Mode != state.InsertMode {
+		t.Fatalf("mode = %v after batched /ab, want insert", m.state.Mode)
+	}
+	if view := m.search.View(); !strings.Contains(view, "ab") || strings.Contains(view, "x") {
+		t.Errorf("search view = %q, want the text typed after /", view)
+	}
+}
+
+func Test_BatchedTextInSearchStaysIntact(t *testing.T) {
+	m := newModel(t, &fakeClient{})
+	m, _ = send(m, keyRunes("jjjj"))
+	if view := m.search.View(); !strings.Contains(view, "jjjj") {
+		t.Errorf("search view = %q, want jjjj typed once", view)
+	}
+}

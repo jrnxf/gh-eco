@@ -125,6 +125,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		if s.Mode == state.NormalMode && msg.Type == tea.KeyRunes && !msg.Paste && len(msg.Runes) > 1 {
+			// one terminal read can batch repeated presses (a held key
+			// over a slow link); key.Matches needs one press at a time.
+			// Each rune sees the mode the previous one left behind.
+			var model tea.Model = m
+			for _, r := range msg.Runes {
+				var cmd tea.Cmd
+				model, cmd = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}, Alt: msg.Alt})
+				cmds = append(cmds, cmd)
+			}
+			return model, tea.Batch(cmds...)
+		}
 		// esc in a search that can be cancelled leaves the search instead
 		cancel := s.Mode == state.InsertMode && s.LookedUp && key.Matches(msg, m.keys.Cancel)
 		if key.Matches(msg, m.keys.Quit) && !cancel {
