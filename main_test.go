@@ -13,12 +13,10 @@ func Test_ParseArgs(t *testing.T) {
 	}{
 		{args: nil, login: ""},
 		{args: []string{"octocat"}, login: "octocat"},
-		{args: []string{"@octocat"}, login: "octocat"},
 		{args: []string{" octocat "}, login: "octocat"},
 		{args: []string{"octocat", "hubot"}, wantErr: true},
 		{args: []string{"--theme"}, wantErr: true},
 		{args: []string{""}, wantErr: true},
-		{args: []string{"@"}, wantErr: true},
 	} {
 		login, err := parseArgs(tc.args)
 		if (err != nil) != tc.wantErr || login != tc.login {

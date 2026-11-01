@@ -37,8 +37,7 @@ func parseArgs(args []string) (string, error) {
 	case strings.HasPrefix(arg, "-"):
 		return "", fmt.Errorf("unknown flag %s", arg)
 	}
-	// a login copied from a mention keeps its @
-	login := strings.TrimPrefix(strings.TrimSpace(arg), "@")
+	login := strings.TrimSpace(arg)
 	if login == "" {
 		return "", errors.New("login is empty")
 	}

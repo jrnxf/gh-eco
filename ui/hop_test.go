@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/jrnxf/gh-eco/models"
 	"github.com/jrnxf/gh-eco/ui/commands"
@@ -247,6 +248,80 @@ func Test_BackDropsAPendingHop(t *testing.T) {
 	}
 }
 
+func Test_BackDropsAPendingReadme(t *testing.T) {
+	client := &fakeClient{
+		users:   map[string]models.User{"alice": {Login: "alice", FollowersCount: 1}, "bob": {Login: "bob"}},
+		people:  map[string][]models.Person{"followers alice": {{Login: "bob"}}},
+		readmes: map[string]string{"bob/bob": "# bob readme"},
+	}
+	m := launch(t, client, "alice", 80, 24)
+	m = openList(t, m, state.FollowersTarget)
+	m, msgs := send(m, enter)
+	m, _ = send(m, find[commands.GetUserResponse](t, msgs))
+	m, msgs = send(m, keyRunes("r"))
+	readme := find[commands.GetReadmeResponse](t, msgs)
+	if !spinnerShows(m, "loading readme…") {
+		t.Fatalf("no readme spinner after r:\n%s", m.View())
+	}
+
+	m, _ = send(m, backspace) // before the readme arrives
+	m, _ = send(m, readme)
+	if m.state.User.Login != "bob" || m.state.CurrentView != state.UserView {
+		t.Errorf("a readme abandoned with backspace left the profile: %q in view %v", m.state.User.Login, m.state.CurrentView)
+	}
+	if m.loading.Visible() || strings.Contains(m.View(), "loading readme") {
+		t.Errorf("spinner still showing with nothing pending:\n%s", m.View())
+	}
+
+	// a second backspace goes back a page as usual
+	m, _ = send(m, backspace)
+	if m.state.User.Login != "alice" || m.state.CurrentView != state.PeopleView {
+		t.Errorf("second backspace left %q in view %v, want alice's list", m.state.User.Login, m.state.CurrentView)
+	}
+}
+
+func Test_TrailDropsOnlyTheOldestThatDoNotFit(t *testing.T) {
+	client := &fakeClient{
+		users: map[string]models.User{
+			"alice": {Login: "alice", FollowingCount: 1},
+			"bob":   {Login: "bob", FollowingCount: 1},
+			"carol": {Login: "carol", FollowingCount: 1},
+			"dave":  {Login: "dave"},
+		},
+		people: map[string][]models.Person{
+			"following alice": {{Login: "bob"}},
+			"following bob":   {{Login: "carol"}},
+			"following carol": {{Login: "dave"}},
+		},
+	}
+	m := launch(t, client, "alice", 80, 24)
+	for range 3 {
+		m = openList(t, m, state.FollowingTarget)
+		var msgs *inbox
+		m, msgs = send(m, enter)
+		m, _ = send(m, find[commands.GetUserResponse](t, msgs))
+	}
+	if trail, _ := topRows(m); trail != "alice › bob › carol › dave" {
+		t.Fatalf("trail after three hops is %q", trail)
+	}
+
+	full, cut := lipgloss.Width("alice › bob › carol › dave"), lipgloss.Width("… › bob › carol › dave")
+	for _, tc := range []struct {
+		width int
+		want  string
+	}{
+		{full, "alice › bob › carol › dave"},
+		{full - 1, "… › bob › carol › dave"},
+		{cut - 1, "… › carol › dave"},
+		{lipgloss.Width("… › dave"), "… › dave"},
+	} {
+		m.state.Layout.ContentWidth = tc.width + state.RightSlack
+		if trail, _ := topRows(m); trail != tc.want {
+			t.Errorf("trail in %d cells is %q, want %q", tc.width, trail, tc.want)
+		}
+	}
+}
+
 func Test_ListPagesThroughLargeLists(t *testing.T) {
 	client := &fakeClient{
 		users:    map[string]models.User{"octocat": {Login: "octocat", FollowersCount: 120}},
@@ -289,6 +364,28 @@ func Test_ListPagesThroughLargeLists(t *testing.T) {
 	m, _ = send(m, tea.KeyMsg{Type: tea.KeyCtrlU})
 	if m.state.People.Selected >= 119 {
 		t.Errorf("ctrl+u did not page up")
+	}
+}
+
+func Test_ListShowsTheNextPageLoadingAtItsEnd(t *testing.T) {
+	client := &fakeClient{
+		users:    map[string]models.User{"octocat": {Login: "octocat", FollowersCount: 120}},
+		people:   map[string][]models.Person{"followers octocat": manyPeople("fan", 120)},
+		pageSize: 50,
+	}
+	m := launch(t, client, "octocat", 80, 24)
+	m = openList(t, m, state.FollowersTarget)
+
+	// walk to the last loaded follower, holding back the next page
+	for m.state.People.Selected < 49 {
+		m, _ = send(m, keyRunes("j"))
+	}
+	checkFrame(t, m.View(), 80, 24)
+	if !spinnerShows(m, "loading followers…") {
+		t.Errorf("no spinner under a full list while the next page loads:\n%s", m.View())
+	}
+	if !strings.Contains(m.View(), "› fan-49") {
+		t.Errorf("selected fan-49 is not on screen:\n%s", m.View())
 	}
 }
 

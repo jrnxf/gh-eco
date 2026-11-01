@@ -50,7 +50,8 @@ func (m Model) rows() int {
 }
 
 // View shows the title and the visible entries, exactly ContentHeight
-// lines. A non-empty spinner goes where the next entries will appear.
+// lines. A non-empty spinner goes where the next entries will appear, once
+// the list is scrolled to its end.
 func (m Model) View(spinner string) string {
 	width := max(0, m.state.Layout.ContentWidth-state.RightSlack)
 	p := m.state.People
@@ -60,11 +61,20 @@ func (m Model) View(spinner string) string {
 	case len(p.List) > 0:
 		column := min(width, maxRowWidth)
 		pad := strings.Repeat(" ", (width-column)/2)
-		end := min(len(p.List), p.Offset+m.rows())
-		for i := p.Offset; i < end; i++ {
+		start, end := p.Offset, min(len(p.List), p.Offset+m.rows())
+		atEnd := spinner != "" && end == len(p.List)
+		if atEnd && end-start == m.rows() {
+			// the spinner takes an end row the selection is not on
+			if p.Selected == end-1 {
+				start++
+			} else {
+				end--
+			}
+		}
+		for i := start; i < end; i++ {
 			lines = append(lines, pad+row(p.List[i], i == p.Selected, column))
 		}
-		if spinner != "" {
+		if atEnd {
 			lines = append(lines, center(spinner, width))
 		}
 	case spinner != "":

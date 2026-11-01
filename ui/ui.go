@@ -131,8 +131,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 		if s.Mode == state.NormalMode {
-			if m.readmePending {
-				// any key means the user moved on: drop the pending
+			if m.readmePending && !key.Matches(msg, m.keys.Back) {
+				// any other key means the user moved on: drop the pending
 				// readme, success or failure
 				m.cancelReadme()
 			}
@@ -277,15 +277,19 @@ func (m *Model) cancelPeople() {
 	m.loading.Stop(loadPeople)
 }
 
-// back cancels a pending hop, keeping the page on screen, or else returns
-// to the previous page, dropping any request still out for the one being
-// left.
+// back cancels a pending hop or readme, keeping the page on screen, or
+// else returns to the previous page, dropping any request still out for
+// the one being left.
 func (m *Model) back() tea.Cmd {
 	if m.pendingLogin != "" {
 		m.userReq++
 		m.pendingLogin = ""
 		m.restart = false
 		m.loading.Stop(loadUser)
+		return nil
+	}
+	if m.readmePending {
+		m.cancelReadme()
 		return nil
 	}
 	s := m.state
@@ -546,10 +550,10 @@ func (m Model) trail() string {
 		return line
 	}
 	// drop the oldest until the rest fit, marking the cut
-	for cut := 0; cut < len(logins); cut++ {
-		earlier := logins[cut:]
+	for cut := 0; cut <= len(logins); cut++ {
+		earlier := logins
 		if cut > 0 {
-			earlier = append([]string{"…"}, earlier[1:]...)
+			earlier = append([]string{"…"}, logins[cut:]...)
 		}
 		if line := render(earlier); lipgloss.Width(line) <= width {
 			return line
