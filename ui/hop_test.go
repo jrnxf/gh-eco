@@ -999,3 +999,25 @@ func Test_HelpOffersBackWheneverBackWorks(t *testing.T) {
 		t.Errorf("readme help does not offer /: %q", ansi.Strip(bottomRow(m)))
 	}
 }
+
+func Test_SlashDropsAPendingReadmeButKeepsAHop(t *testing.T) {
+	m := launch(t, hopFixture(), "alice", 80, 24)
+	m = focusRepo(t, m, "alice-repo")
+	m, msgs := send(m, keyRunes("r"))
+	readme := find[commands.GetReadmeResponse](t, msgs)
+	m, _ = send(m, keyRunes("/"))
+	if m.readmePending || m.loading.Visible() {
+		t.Errorf("/ left the readme pending")
+	}
+	m, _ = send(m, esc)
+	m, _ = send(m, readme)
+	if m.state.CurrentView != state.UserView {
+		t.Errorf("a readme dropped by / opened after esc")
+	}
+
+	m, _ = lookup(t, m, "bob")
+	m, _ = send(m, keyRunes("/"))
+	if m.pendingLogin != "bob" {
+		t.Errorf("/ dropped the pending hop")
+	}
+}

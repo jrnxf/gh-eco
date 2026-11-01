@@ -157,8 +157,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 			// the latest key wins: one that acted on the dimmed page drops
 			// the load it did not replace itself; a key that did nothing
-			// keeps it
-			if acted && m.readmePending && m.readmeReq == readmeReq {
+			// keeps it. Opening the search leaves the readme behind but
+			// keeps a hop, so esc loses nothing
+			if (acted || key.Matches(msg, m.keys.FocusInput)) && m.readmePending && m.readmeReq == readmeReq {
 				m.cancelReadme()
 			}
 			if acted && m.pendingLogin != "" && m.userReq == userReq {
