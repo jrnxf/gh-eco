@@ -1,4 +1,4 @@
-# Renders the README demo on live data: vhs demo.tape
+# Records the README demo on live data; ./demo.sh renders it with keycaps.
 # Needs a gh login. Never add s or ! here: they star repos publicly.
 
 Output demo.gif
@@ -58,7 +58,8 @@ Sleep 700ms
 Type "j"
 Sleep 700ms
 Type "j"
-Sleep 1.5s
+Sleep 2s
 
+# quit off camera, so the loop ends on the app
+Hide
 Escape
-Sleep 500ms

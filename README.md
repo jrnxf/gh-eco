@@ -9,7 +9,7 @@ Stars](https://img.shields.io/github/stars/jrnxf/gh-eco)](https://github.com/jrn
 
 ![demo](https://github.com/jrnxf/assets/raw/main/gh-eco/demo.gif)
 
-_Regenerate it with [vhs](https://github.com/charmbracelet/vhs): `vhs demo.tape`._
+_Regenerate it with [vhs](https://github.com/charmbracelet/vhs) and ffmpeg: `./demo.sh`._
 
 ## Installation
 
