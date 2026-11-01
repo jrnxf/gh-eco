@@ -21,8 +21,7 @@ filters=$(awk '
 		return d
 	}
 	function cap(label) {
-		if (!shown) return
-		f = f sprintf(",drawtext=font=JetBrains Mono:text=%s:fontsize=30:fontcolor=0xd0d0d0:box=1:boxcolor=0x3a3f47@0.9:boxborderw=14|24:x=w-tw-72:y=36:enable=between(t\\,%.2f\\,%.2f)", label, t, t + 0.8)
+		if (shown) { n++; at[n] = t; key[n] = label }
 	}
 	$1 == "Set" && $2 == "TypingSpeed" { speed = secs($3) }
 	$1 == "Show" { shown = 1 }
@@ -37,7 +36,15 @@ filters=$(awk '
 	$1 == "Enter" { cap("enter") }
 	$1 == "Escape" { cap("esc") }
 	$1 ~ /^Ctrl\+/ { cap(tolower($1)) }
-	END { print substr(f, 2) }
+	END {
+		# each keycap stays up to 0.8 s, and clears just before the next one
+		for (i = 1; i <= n; i++) {
+			end = at[i] + 0.8
+			if (i < n && at[i + 1] - 0.05 < end) end = at[i + 1] - 0.05
+			f = f sprintf(",drawtext=font=JetBrains Mono:text=%s:fontsize=30:fontcolor=0xd0d0d0:box=1:boxcolor=0x3a3f47@0.9:boxborderw=14|24:x=w-tw-72:y=36:enable=between(t\\,%.2f\\,%.2f)", key[i], at[i], end)
+		}
+		print substr(f, 2)
+	}
 ' demo.tape)
 
 ffmpeg -loglevel error -y -i demo.gif \
