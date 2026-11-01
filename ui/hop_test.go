@@ -20,9 +20,7 @@ var backspace = tea.KeyMsg{Type: tea.KeyBackspace}
 func launch(t *testing.T, client *fakeClient, login string, width, height int) Model {
 	t.Helper()
 	m, _ := send(New(client, login), tea.WindowSizeMsg{Width: width, Height: height})
-	in := run(m.Init())
-	m, in = send(m, find[commands.SearchSubmitted](t, in))
-	m, _ = send(m, find[commands.GetUserResponse](t, in))
+	m, _ = send(m, find[commands.GetUserResponse](t, run(m.Init())))
 	return m
 }
 
@@ -69,6 +67,18 @@ func Test_LaunchOpensTheGivenLogin(t *testing.T) {
 	}
 }
 
+func Test_LaunchShowsTheLoginLoadingFromTheFirstFrame(t *testing.T) {
+	client := &fakeClient{users: map[string]models.User{"octocat": octocat()}}
+	m, _ := send(New(client, "octocat"), tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	if trail, search := topRows(m); trail != "octocat" || search != "" {
+		t.Errorf("first frame top rows are %q and %q, want the trail and no search line", trail, search)
+	}
+	if !spinnerShows(m, "loading octocat…") {
+		t.Errorf("first frame does not show octocat loading:\n%s", m.View())
+	}
+}
+
 func Test_LaunchWithUnknownLoginShowsNotFound(t *testing.T) {
 	client := &fakeClient{users: map[string]models.User{}}
 	m := launch(t, client, "ghost", 80, 24)
@@ -85,7 +95,7 @@ func Test_LaunchWithUnknownLoginShowsNotFound(t *testing.T) {
 func Test_LaunchWithoutLoginStartsInTheSearchBox(t *testing.T) {
 	client := &fakeClient{users: map[string]models.User{"octocat": octocat()}}
 	m, _ := send(New(client, ""), tea.WindowSizeMsg{Width: 80, Height: 24})
-	if _, ok := firstOf[commands.SearchSubmitted](run(m.Init()).all(t)); ok {
+	if _, ok := firstOf[commands.GetUserResponse](run(m.Init()).all(t)); ok {
 		t.Errorf("launch without a login looked someone up")
 	}
 	if m.state.Mode != state.InsertMode || len(client.calls) > 0 {
@@ -214,13 +224,26 @@ func Test_BackDropsAPendingHop(t *testing.T) {
 	m, msgs := send(m, enter)
 	bob := find[commands.GetUserResponse](t, msgs)
 
+	if trail, _ := topRows(m); trail != "alice › bob" {
+		t.Fatalf("trail while bob loads is %q", trail)
+	}
+
 	m, _ = send(m, backspace) // before bob arrives
 	m, _ = send(m, bob)
-	if m.state.User.Login != "alice" || m.state.CurrentView != state.UserView {
-		t.Errorf("a hop abandoned with backspace still landed: %q in view %v", m.state.User.Login, m.state.CurrentView)
+	if m.state.User.Login != "alice" || m.state.CurrentView != state.PeopleView {
+		t.Errorf("a hop abandoned with backspace left the list: %q in view %v", m.state.User.Login, m.state.CurrentView)
 	}
-	if m.loading.Visible() {
-		t.Errorf("spinner still showing with nothing pending")
+	if m.loading.Visible() || strings.Contains(m.View(), "loading bob") {
+		t.Errorf("spinner still showing with nothing pending:\n%s", m.View())
+	}
+	if trail, _ := topRows(m); trail != "alice" {
+		t.Errorf("trail after cancelling the hop is %q, want alice", trail)
+	}
+
+	// a second backspace goes back a page as usual
+	m, _ = send(m, backspace)
+	if m.state.User.Login != "alice" || m.state.CurrentView != state.UserView {
+		t.Errorf("second backspace left %q in view %v, want alice's profile", m.state.User.Login, m.state.CurrentView)
 	}
 }
 

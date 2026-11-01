@@ -52,8 +52,9 @@ type Model struct {
 	help     help.Model
 	message  message.Model
 	loading  loading.Model
-	// login is the profile to open first, empty to start in the search box.
-	login string
+	// start is the first command: the lookup of the login to open first,
+	// or the search box cursor blink.
+	start tea.Cmd
 	// userReq identifies the latest user lookup; pendingLogin is the login
 	// it looks up while it is unanswered.
 	userReq      int
@@ -90,11 +91,10 @@ func New(client Client, login string) Model {
 		mode = state.NormalMode
 	}
 	s := &state.State{Mode: mode, CurrentView: state.UserView}
-	return Model{
+	m := Model{
 		client:      client,
 		state:       s,
 		keys:        keys.Keys,
-		login:       login,
 		search:      search.NewModel(s),
 		user:        user.NewModel(s),
 		people:      people.NewModel(s),
@@ -104,14 +104,16 @@ func New(client Client, login string) Model {
 		loading:     loading.New(),
 		starPending: map[string]bool{},
 	}
+	m.start = textinput.Blink
+	if login != "" {
+		// the first frame already shows the login loading
+		m.start = m.lookup(login)
+	}
+	return m
 }
 
 func (m Model) Init() tea.Cmd {
-	login := m.login
-	if login == "" {
-		return textinput.Blink
-	}
-	return func() tea.Msg { return commands.SearchSubmitted{Login: login} }
+	return m.start
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -260,16 +262,20 @@ func (m *Model) cancelPeople() {
 	m.loading.Stop(loadPeople)
 }
 
-// back returns to the previous page, dropping any request still out for
-// the one being left.
+// back cancels a pending hop, keeping the page on screen, or else returns
+// to the previous page, dropping any request still out for the one being
+// left.
 func (m *Model) back() tea.Cmd {
+	if m.pendingLogin != "" {
+		m.userReq++
+		m.pendingLogin = ""
+		m.loading.Stop(loadUser)
+		return nil
+	}
 	s := m.state
 	if !s.Pop() {
 		return nil
 	}
-	m.userReq++
-	m.pendingLogin = ""
-	m.loading.Stop(loadUser)
 	m.cancelReadme()
 	m.cancelPeople()
 	m.user.Reset()
