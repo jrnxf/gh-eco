@@ -2,6 +2,6 @@
 
 package theme
 
-func queryBackground() (r, g, b float64, ok bool) {
-	return 0, 0, 0, false
+func queryBackground() (reply string, ok bool) {
+	return "", false
 }

@@ -20,8 +20,10 @@ var (
 	Spinner = lipgloss.AdaptiveColor{Light: "#0969DA", Dark: "#5E81AC"}
 
 	Bold = lipgloss.NewStyle().Bold(true)
-	// FocusedName marks the profile name when it has focus.
-	FocusedName = Bold.Underline(true)
+	// FocusedName marks the profile name when it has focus: accent text,
+	// underlined, so the underline is accent too. lipgloss cannot color an
+	// underline on its own (SGR 58).
+	FocusedName = Bold.Underline(true).Foreground(Accent)
 
 	roundedBorder = lipgloss.Border{
 		Top:         "─",

@@ -3,6 +3,8 @@
 package theme
 
 import (
+	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -10,23 +12,31 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Detect settles the background lipgloss assumes. termenv refuses to ask
-// the terminal inside tmux or screen and then assumes dark, which gives a
-// light terminal the dark palette. tmux 3.3 and later answers the query
-// itself with the client terminal's colors, so ask directly there.
+// Detect settles the background lipgloss assumes, logging the evidence to
+// the debug log. It asks the terminal itself in every terminal: termenv
+// refuses to inside tmux or screen and then assumes dark.
 func Detect() {
-	if os.Getenv("COLORFGBG") != "" {
-		// termenv reads it
+	reply, ok := queryBackground()
+	if !ok {
+		// not a terminal: lipgloss renders without color anyway
 		return
 	}
-	term := os.Getenv("TERM")
-	if os.Getenv("TMUX") == "" && !strings.HasPrefix(term, "screen") && !strings.HasPrefix(term, "tmux") {
-		// outside a multiplexer termenv's own query works
-		return
+	dark, why := decide(reply, os.Getenv("COLORFGBG"))
+	log.Printf("background: dark=%v (%s)", dark, why)
+	lipgloss.SetHasDarkBackground(dark)
+}
+
+// decide picks dark or light from, in order: the terminal's OSC 11 reply,
+// the COLORFGBG variable some terminals set, and a dark default.
+func decide(reply, colorFGBG string) (dark bool, why string) {
+	if r, g, b, ok := parseOSC11(reply); ok {
+		return isDark(r, g, b), fmt.Sprintf("OSC 11 reply rgb %.2f/%.2f/%.2f", r, g, b)
 	}
-	if r, g, b, ok := queryBackground(); ok {
-		lipgloss.SetHasDarkBackground(isDark(r, g, b))
+	if bg, ok := parseColorFGBG(colorFGBG); ok {
+		// ANSI 7 (light gray) and the bright colors from 9 up are light
+		return bg < 7 || bg == 8, fmt.Sprintf("COLORFGBG background %d", bg)
 	}
+	return true, fmt.Sprintf("no OSC 11 reply (%q) or COLORFGBG, default", reply)
 }
 
 // isDark matches termenv: a background is dark when its HSL lightness is
@@ -35,14 +45,17 @@ func isDark(r, g, b float64) bool {
 	return (max(r, g, b)+min(r, g, b))/2 < 0.5
 }
 
-// parseOSC11 reads a reply like "\x1b]11;rgb:ffff/ffff/ffff\x07", where
-// each channel has one to four hex digits.
-func parseOSC11(reply string) (r, g, b float64, ok bool) {
-	i := strings.Index(reply, "rgb:")
+// parseOSC11 finds a reply like "\x1b]11;rgb:ffff/ffff/ffff\x07" in s,
+// where each channel has one to four hex digits.
+func parseOSC11(s string) (r, g, b float64, ok bool) {
+	i := strings.Index(s, "]11;rgb:")
 	if i < 0 {
 		return 0, 0, 0, false
 	}
-	body := strings.TrimRight(reply[i+len("rgb:"):], "\x07\x1b\\")
+	body := s[i+len("]11;rgb:"):]
+	if end := strings.IndexAny(body, "\x07\x1b"); end >= 0 {
+		body = body[:end]
+	}
 	parts := strings.Split(body, "/")
 	if len(parts) != 3 {
 		return 0, 0, 0, false
@@ -59,4 +72,18 @@ func parseOSC11(reply string) (r, g, b float64, ok bool) {
 		ch[k] = float64(v) / float64(uint64(1)<<(4*len(p))-1)
 	}
 	return ch[0], ch[1], ch[2], true
+}
+
+// parseColorFGBG reads the background index from "fg;bg" or
+// "fg;default;bg".
+func parseColorFGBG(v string) (int, bool) {
+	parts := strings.Split(v, ";")
+	if len(parts) < 2 {
+		return 0, false
+	}
+	bg, err := strconv.Atoi(parts[len(parts)-1])
+	if err != nil || bg < 0 || bg > 15 {
+		return 0, false
+	}
+	return bg, true
 }
