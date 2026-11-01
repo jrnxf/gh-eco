@@ -67,12 +67,13 @@ func Grid(repos []models.Repo, focused, width int) (grid string, rowHeight, top,
 
 // card renders one repo in a frame whose text area is width cells wide.
 func card(r models.Repo, width int, focused bool) string {
-	name, frame := styles.Bold, styles.Frame
+	// focus shows on the border alone
+	frame := styles.Frame
 	if focused {
-		name, frame = styles.FocusedBold, styles.FocusedFrame
+		frame = styles.FocusedFrame
 	}
 	lines := []string{
-		name.Render(text.Ellipsize(r.Name, width)),
+		styles.Bold.Render(text.Ellipsize(r.Name, width)),
 		text.Ellipsize(description(r), width),
 		text.Ellipsize(stats(r), width),
 	}
@@ -88,7 +89,7 @@ func description(r models.Repo) string {
 func stats(r models.Repo) string {
 	star := "⭑"
 	if r.ViewerHasStarred {
-		star = lipgloss.NewStyle().Foreground(lipgloss.Color("#DAAA3F")).Render("⭑")
+		star = lipgloss.NewStyle().Foreground(styles.Star).Render("⭑")
 	}
 	stars := fmt.Sprintf("%s %v", star, r.StarsCount)
 	lang := r.PrimaryLanguage

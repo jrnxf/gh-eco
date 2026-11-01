@@ -108,5 +108,5 @@ func (m Model) footerView() string {
 	scrollPercentage := fmt.Sprintf(" %.f%%", m.Viewport.ScrollPercent()*100)
 	line := strings.Repeat("─", max(0, m.Viewport.Width-lipgloss.Width(scrollPercentage)))
 
-	return styles.FaintBold.Render(lipgloss.JoinHorizontal(lipgloss.Center, line, scrollPercentage))
+	return styles.Muted().Bold(true).Render(lipgloss.JoinHorizontal(lipgloss.Center, line, scrollPercentage))
 }

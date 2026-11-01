@@ -475,22 +475,53 @@ func Test_NoticeKeepsTheView(t *testing.T) {
 	}
 }
 
-func Test_ThanksOnlyAfterStarringGhEco(t *testing.T) {
-	m := newModel(t, &fakeClient{})
-	m.state.Mode = state.NormalMode // ! works once the search box is left
+func Test_StarGhEcoIsInstantAndRevertsOnFailure(t *testing.T) {
+	// a profile that pins gh-eco, so the star shows on its card
+	owner := models.User{Login: "jrnxf", PinnedRepos: []models.Repo{
+		{Id: github.GhEcoRepoID, Name: "gh-eco", StarsCount: 482},
+	}}
+	client := &fakeClient{
+		users:   map[string]models.User{"jrnxf": owner},
+		starErr: errors.New("You do not have permission to star this repository"),
+	}
+	m := newModel(t, client)
+	m, res := lookup(t, m, "jrnxf")
+	m, _ = send(m, res)
 
 	m, msgs := send(m, keyRunes("!"))
-	if _, ok := firstOf[commands.SetMessage](msgs.all(t)); ok {
-		t.Errorf("thanked before the star request returned")
+	if r := m.state.PinnedRepo(github.GhEcoRepoID); !r.ViewerHasStarred || r.StarsCount != 483 {
+		t.Fatalf("star not shown at once: %+v", r)
 	}
-	_, msgs = send(m, find[commands.StarResponse](t, msgs))
 	if msg := find[commands.SetMessage](t, msgs); !strings.Contains(msg.Content, "tysm") {
-		t.Errorf("notice after starring gh-eco = %q", msg.Content)
+		t.Errorf("no thanks right away: %q", msg.Content)
 	}
 
-	_, msgs = send(m, commands.StarResponse{Err: errors.New("boom")})
-	if msg := find[commands.SetMessage](t, msgs); strings.Contains(msg.Content, "tysm") {
-		t.Errorf("thanked for a star that failed")
+	m, msgs = send(m, find[commands.StarResponse](t, msgs))
+	if r := m.state.PinnedRepo(github.GhEcoRepoID); r.ViewerHasStarred || r.StarsCount != 482 {
+		t.Errorf("failed star not reverted: %+v", r)
+	}
+	m, _ = send(m, find[commands.SetMessage](t, msgs))
+	if !strings.Contains(bottomRow(m), "star failed: You do not have permission") {
+		t.Errorf("notice does not say why: %q", bottomRow(m))
+	}
+}
+
+func Test_StarGhEcoKeepsAnExistingStarOnFailure(t *testing.T) {
+	owner := models.User{Login: "jrnxf", PinnedRepos: []models.Repo{
+		{Id: github.GhEcoRepoID, Name: "gh-eco", StarsCount: 482, ViewerHasStarred: true},
+	}}
+	client := &fakeClient{
+		users:   map[string]models.User{"jrnxf": owner},
+		starErr: errors.New("boom"),
+	}
+	m := newModel(t, client)
+	m, res := lookup(t, m, "jrnxf")
+	m, _ = send(m, res)
+
+	m, msgs := send(m, keyRunes("!"))
+	m, _ = send(m, find[commands.StarResponse](t, msgs))
+	if r := m.state.PinnedRepo(github.GhEcoRepoID); !r.ViewerHasStarred || r.StarsCount != 482 {
+		t.Errorf("a failed ! removed a star the viewer already had: %+v", r)
 	}
 }
 

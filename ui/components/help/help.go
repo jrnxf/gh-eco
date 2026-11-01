@@ -8,6 +8,7 @@ import (
 
 	"github.com/jrnxf/gh-eco/ui/keys"
 	"github.com/jrnxf/gh-eco/ui/state"
+	"github.com/jrnxf/gh-eco/ui/styles"
 )
 
 type Model struct {
@@ -19,9 +20,18 @@ type Model struct {
 func NewModel(s *state.State) Model {
 	return Model{
 		keys:  keys.Keys,
-		help:  baseHelp.New(),
+		help:  newHelp(),
 		state: s,
 	}
+}
+
+func newHelp() baseHelp.Model {
+	h := baseHelp.New()
+	h.Styles.ShortKey = styles.HelpKey
+	h.Styles.ShortDesc = styles.HelpDesc
+	h.Styles.ShortSeparator = styles.HelpSeparator
+	h.Styles.Ellipsis = styles.HelpSeparator
+	return h
 }
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {

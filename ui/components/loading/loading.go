@@ -7,9 +7,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-)
 
-var labelStyle = lipgloss.NewStyle().Faint(true)
+	"github.com/jrnxf/gh-eco/ui/styles"
+)
 
 type Model struct {
 	spinner spinner.Model
@@ -21,7 +21,7 @@ func New() Model {
 	return Model{
 		spinner: spinner.New(
 			spinner.WithSpinner(spinner.Dot),
-			spinner.WithStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("#5E81AC"))),
+			spinner.WithStyle(lipgloss.NewStyle().Foreground(styles.Spinner)),
 		),
 	}
 }
@@ -62,5 +62,5 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 // View renders the spinner and label, cut to width.
 func (m Model) View(width int) string {
-	return ansi.Truncate(m.spinner.View()+" "+labelStyle.Render(m.label), width, "…")
+	return ansi.Truncate(m.spinner.View()+" "+styles.Muted().Render(m.label), width, "…")
 }

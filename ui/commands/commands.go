@@ -35,7 +35,10 @@ type StarResponse struct {
 	// Id is the starrable the toggle was for, set even when it failed.
 	Id string
 	// Unstar is true when the request removed a star.
-	Unstar    bool
+	Unstar bool
+	// Prev is whether the viewer had starred it before the toggle, which a
+	// failure restores.
+	Prev      bool
 	Starrable models.Starrable
 	Err       error
 }

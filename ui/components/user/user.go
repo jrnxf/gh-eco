@@ -136,13 +136,12 @@ func (m Model) header(width int) []string {
 	}
 	nameStyle := styles.Bold
 	if m.state.Focused().Kind == state.UserTarget {
-		nameStyle = styles.FocusedBold
+		nameStyle = styles.FocusedName
 	}
 	blocks := []string{nameStyle.Render(text.Ellipsize(name, width))}
 
 	if u.Bio != "" {
-		bio := lipgloss.NewStyle().
-			Faint(true).
+		bio := styles.Muted().
 			Align(lipgloss.Center).
 			Width(min(width, lipgloss.Width(u.Bio))).
 			Render(u.Bio)

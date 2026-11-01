@@ -145,7 +145,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Err != nil {
 			if r != nil {
 				// undo the optimistic toggle
-				setStarred(r, msg.Unstar)
+				setStarred(r, msg.Prev)
 			}
 			text := "star failed: "
 			if msg.Unstar {
@@ -153,9 +153,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			cmds = append(cmds, message.Show(text+msg.Err.Error(), 3))
 			break
-		}
-		if msg.Id == github.GhEcoRepoID && !msg.Unstar {
-			cmds = append(cmds, message.Show("tysm 🥹", 2))
 		}
 		if r != nil {
 			r.ViewerHasStarred = msg.Starrable.ViewerHasStarred
@@ -205,12 +202,22 @@ func (m *Model) handleNormalKey(msg tea.KeyMsg) tea.Cmd {
 			unstar := r.ViewerHasStarred
 			setStarred(r, !unstar)
 			m.starReq[r.Id]++
-			return star(m.client, r.Id, unstar, m.starReq[r.Id])
+			return star(m.client, r.Id, unstar, unstar, m.starReq[r.Id])
 		}
 
 	case key.Matches(msg, m.keys.StarGhEco):
+		// thank at once and show the star if gh-eco is pinned here; a
+		// failure replaces the thanks and restores the card
+		prev := false
+		if r := s.PinnedRepo(github.GhEcoRepoID); r != nil {
+			prev = r.ViewerHasStarred
+			setStarred(r, true)
+		}
 		m.starReq[github.GhEcoRepoID]++
-		return star(m.client, github.GhEcoRepoID, false, m.starReq[github.GhEcoRepoID])
+		return tea.Batch(
+			message.Show("tysm 🥹", 2),
+			star(m.client, github.GhEcoRepoID, false, prev, m.starReq[github.GhEcoRepoID]),
+		)
 
 	case key.Matches(msg, m.keys.ToggleReadme):
 		switch s.CurrentView {
@@ -323,15 +330,16 @@ func (m *Model) openReadme(ref readmeRef) tea.Cmd {
 	return tea.Batch(fetch, m.loading.Start(loadingReadme))
 }
 
-// star stars id, or removes the star when starred is true.
-func star(c Client, id string, starred bool, req int) tea.Cmd {
+// star stars id, or removes the star when starred is true. prev is the
+// state a failure restores.
+func star(c Client, id string, starred, prev bool, req int) tea.Cmd {
 	return func() tea.Msg {
 		do := c.Star
 		if starred {
 			do = c.Unstar
 		}
 		s, err := do(context.Background(), id)
-		return commands.StarResponse{Req: req, Id: id, Unstar: starred, Starrable: s, Err: err}
+		return commands.StarResponse{Req: req, Id: id, Unstar: starred, Prev: prev, Starrable: s, Err: err}
 	}
 }
 

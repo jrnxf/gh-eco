@@ -11,9 +11,10 @@ import (
 
 	"github.com/jrnxf/gh-eco/ui/commands"
 	"github.com/jrnxf/gh-eco/ui/state"
+	"github.com/jrnxf/gh-eco/ui/styles"
 )
 
-var style = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#7D56F4"})
+var style = lipgloss.NewStyle().Bold(true).Foreground(styles.Accent)
 
 type Model struct {
 	Content string

@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jrnxf/gh-eco/api/github"
 	"github.com/jrnxf/gh-eco/ui"
+	"github.com/jrnxf/gh-eco/ui/theme"
 )
 
 func main() {
@@ -22,6 +23,9 @@ func main() {
 	} else {
 		log.SetOutput(io.Discard)
 	}
+
+	// before anything renders, so adaptive colors match the terminal
+	theme.Detect()
 
 	client, err := github.NewClient()
 	if err != nil {

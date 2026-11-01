@@ -95,12 +95,28 @@ func (s *State) PinnedRepo(id string) *models.Repo {
 	return nil
 }
 
+// FocusNext moves focus to the next target, wrapping from the last pinned
+// repo back to the profile. The empty target only exists before the first
+// move: cycling never lands on it.
 func (s *State) FocusNext() {
 	n := len(s.Targets())
-	s.Focus = (s.Focus + 1) % n
+	if n == 1 {
+		s.Focus = 0
+		return
+	}
+	s.Focus = s.Focus%(n-1) + 1
 }
 
+// FocusPrev moves focus to the previous target, wrapping from the profile
+// to the last pinned repo.
 func (s *State) FocusPrev() {
 	n := len(s.Targets())
-	s.Focus = (s.Focus - 1 + n) % n
+	switch {
+	case n == 1:
+		s.Focus = 0
+	case s.Focus <= 1:
+		s.Focus = n - 1
+	default:
+		s.Focus--
+	}
 }
