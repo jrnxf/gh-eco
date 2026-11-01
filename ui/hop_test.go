@@ -907,3 +907,65 @@ func Test_SlashOpensSearchInsideAReadme(t *testing.T) {
 		t.Errorf("esc after / in a readme: mode %v on %q", m.state.Mode, m.state.User.Login)
 	}
 }
+
+func Test_UnboundKeysKeepAPendingLoad(t *testing.T) {
+	unbound := []tea.KeyMsg{keyRunes("x"), {Type: tea.KeyTab}, {Type: tea.KeyShiftTab}}
+
+	// a pending hop
+	m := launch(t, hopFixture(), "alice", 80, 24)
+	m, bob := lookup(t, m, "bob")
+	for _, k := range unbound {
+		m, _ = send(m, k)
+	}
+	if m.pendingLogin != "bob" || !spinnerOnTop(m) {
+		t.Fatalf("an unbound key dropped the pending hop:\n%s", m.View())
+	}
+	m, _ = send(m, bob)
+	if m.state.User.Login != "bob" {
+		t.Errorf("the kept hop did not land: %q", m.state.User.Login)
+	}
+
+	// a pending readme
+	m = focusRepo(t, m, "bob-repo")
+	m, msgs := send(m, keyRunes("r"))
+	readme := find[commands.GetReadmeResponse](t, msgs)
+	for _, k := range unbound {
+		m, _ = send(m, k)
+	}
+	if !m.readmePending || !spinnerOnTop(m) {
+		t.Fatalf("an unbound key dropped the pending readme:\n%s", m.View())
+	}
+	m, _ = send(m, readme)
+	if m.state.CurrentView != state.ReadmeView {
+		t.Errorf("the kept readme did not open: view %v", m.state.CurrentView)
+	}
+}
+
+func Test_HelpOffersBackWheneverBackWorks(t *testing.T) {
+	// launched with a login: the first lookup can be dropped
+	client := hopFixture()
+	m, _ := send(New(client, "alice"), tea.WindowSizeMsg{Width: 200, Height: 24})
+	if !strings.Contains(ansi.Strip(bottomRow(m)), "back") {
+		t.Errorf("help while the first profile loads has no back: %q", ansi.Strip(bottomRow(m)))
+	}
+
+	// a first profile with no history and a readme pending
+	m = launch(t, client, "alice", 200, 24)
+	if strings.Contains(ansi.Strip(bottomRow(m)), "back") {
+		t.Errorf("help offers back with nothing to go back to: %q", ansi.Strip(bottomRow(m)))
+	}
+	m = focusRepo(t, m, "alice-repo")
+	m, msgs := send(m, keyRunes("r"))
+	if !strings.Contains(ansi.Strip(bottomRow(m)), "back") {
+		t.Errorf("help while a readme loads has no back: %q", ansi.Strip(bottomRow(m)))
+	}
+
+	// / works in a readme, and the help says so
+	m, _ = send(m, find[commands.GetReadmeResponse](t, msgs))
+	if m.state.CurrentView != state.ReadmeView {
+		t.Fatalf("readme did not open")
+	}
+	if !strings.Contains(ansi.Strip(bottomRow(m)), "/ focus input") {
+		t.Errorf("readme help does not offer /: %q", ansi.Strip(bottomRow(m)))
+	}
+}

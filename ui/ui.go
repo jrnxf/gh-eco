@@ -152,12 +152,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, m.back())
 				break
 			}
-			if m.readmePending && !key.Matches(msg, m.keys.Back) {
-				// any other key means the user moved on: drop the pending
-				// readme, success or failure
+			if m.readmePending && (m.acts(msg) || key.Matches(msg, m.keys.FocusInput)) {
+				// the user moved on: drop the pending readme, success or
+				// failure
 				m.cancelReadme()
 			}
-			if m.pendingLogin != "" && !key.Matches(msg, m.keys.Back) && !key.Matches(msg, m.keys.FocusInput) && !key.Matches(msg, m.keys.StarGhEco) {
+			if m.pendingLogin != "" && m.acts(msg) {
 				// the latest key wins: it acts on the dimmed page at once,
 				// and the profile still loading is dropped
 				m.cancelHop()
@@ -310,6 +310,14 @@ func (m *Model) cancelHop() {
 	m.pendingLogin = ""
 	m.restart = false
 	m.loading.Stop(loadUser)
+}
+
+// acts reports whether msg is a key that acts on the page on screen, so
+// it overrides a load still pending; keys bound to nothing keep it.
+func (m Model) acts(msg tea.KeyMsg) bool {
+	k := m.keys
+	return key.Matches(msg, k.FocusNext, k.FocusPrev, k.PreviewPageDown, k.PreviewPageUp,
+		k.OpenList, k.OpenProfile, k.ToggleReadme, k.OpenGithub, k.StarRepo)
 }
 
 // canGoBack reports whether back has anything to undo: a load to drop, a
