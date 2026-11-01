@@ -59,8 +59,13 @@ func NewClientWithOptions(opts api.ClientOptions) (*Client, error) {
 // ErrNotFound means no user or organization has the login.
 var ErrNotFound = errors.New("not found")
 
+// peoplePageSize is how many followers or followed people one request
+// fetches.
+const peoplePageSize = 50
+
 // User fetches a user or organization profile with its pinned repositories,
-// and a user's contribution graph.
+// or its most-starred ones when nothing is pinned, and a user's
+// contribution graph.
 func (c *Client) User(ctx context.Context, login string) (models.User, error) {
 	var query queries.GetOwnerQuery
 	variables := map[string]interface{}{
@@ -75,6 +80,42 @@ func (c *Client) User(ctx context.Context, login string) (models.User, error) {
 		return models.User{}, ErrNotFound
 	}
 	return u, nil
+}
+
+// Viewer fetches the login of the authenticated user.
+func (c *Client) Viewer(ctx context.Context) (string, error) {
+	var query queries.GetViewerQuery
+	if err := c.gql.QueryWithContext(ctx, "GetViewer", &query, nil); err != nil {
+		return "", err
+	}
+	return query.Viewer.Login, nil
+}
+
+// People fetches one page of a user's followers or of the people they
+// follow, continuing after the cursor after, or from the start when it is
+// empty.
+func (c *Client) People(ctx context.Context, login string, kind models.PeopleKind, after string) (models.PeoplePage, error) {
+	var cursor *queries.String
+	if after != "" {
+		cursor = (*queries.String)(&after)
+	}
+	variables := map[string]interface{}{
+		"login": queries.String(login),
+		"first": queries.Int(peoplePageSize),
+		"after": cursor,
+	}
+	if kind == models.Following {
+		var query queries.GetFollowingQuery
+		if err := c.gql.QueryWithContext(ctx, "GetFollowing", &query, variables); err != nil {
+			return models.PeoplePage{}, err
+		}
+		return mapPeople(query.User.Following), nil
+	}
+	var query queries.GetFollowersQuery
+	if err := c.gql.QueryWithContext(ctx, "GetFollowers", &query, variables); err != nil {
+		return models.PeoplePage{}, err
+	}
+	return mapPeople(query.User.Followers), nil
 }
 
 // Readme fetches the decoded readme of owner/name.

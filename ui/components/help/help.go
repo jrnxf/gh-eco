@@ -59,14 +59,33 @@ func (m Model) collectHelpBindings() []key.Binding {
 		if s.User.Login == "" {
 			// loading, or the search failed
 			bindings = append(bindings, k.FocusInput)
+			if len(s.History) > 0 {
+				bindings = append(bindings, k.Back)
+			}
 		} else {
-			if s.CurrentView == state.UserView {
-				bindings = append(bindings, k.FocusInput, k.FocusNext, k.FocusPrev, k.ToggleReadme, k.OpenGithub)
+			switch s.CurrentView {
+			case state.UserView:
+				bindings = append(bindings, k.FocusInput, k.FocusNext, k.FocusPrev)
+				if len(s.History) > 0 {
+					bindings = append(bindings, k.Back)
+				}
+				switch s.Focused().Kind {
+				case state.FollowersTarget, state.FollowingTarget:
+					bindings = append(bindings, k.OpenList)
+				default:
+					bindings = append(bindings, k.ToggleReadme)
+				}
+				bindings = append(bindings, k.OpenGithub)
 				if s.Focused().Kind == state.RepoTarget {
 					bindings = append(bindings, k.StarRepo)
 				}
-			} else if s.CurrentView == state.ReadmeView {
+			case state.PeopleView:
+				bindings = append(bindings, k.FocusNext, k.FocusPrev, k.OpenProfile, k.Back, k.OpenGithub, k.FocusInput)
+			case state.ReadmeView:
 				bindings = append(bindings, k.FocusNext, k.FocusPrev, k.PreviewPageDown, k.PreviewPageUp, k.ToggleReadme)
+				if len(s.History) > 0 {
+					bindings = append(bindings, k.Back)
+				}
 				if s.Focused().Kind == state.RepoTarget {
 					// a profile readme has no repo to star
 					bindings = append(bindings, k.StarRepo)

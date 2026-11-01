@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -27,6 +28,15 @@ type fakeClient struct {
 	cache   map[string]string
 	// starErr fails every star and unstar.
 	starErr error
+	// viewer is the authenticated user's login; viewerErr fails the lookup.
+	viewer    string
+	viewerErr error
+	// people maps "followers login" or "following login" to every entry;
+	// pageSize splits it into pages, all of it in one by default.
+	people   map[string][]models.Person
+	pageSize int
+	// peopleErr fails every list page.
+	peopleErr error
 }
 
 func (f *fakeClient) record(call string) {
@@ -47,6 +57,36 @@ func (f *fakeClient) User(_ context.Context, login string) (models.User, error) 
 		return u, nil
 	}
 	return models.User{}, github.ErrNotFound
+}
+
+func (f *fakeClient) Viewer(context.Context) (string, error) {
+	f.record("viewer")
+	return f.viewer, f.viewerErr
+}
+
+func (f *fakeClient) People(_ context.Context, login string, kind models.PeopleKind, after string) (models.PeoplePage, error) {
+	list := "followers " + login
+	if kind == models.Following {
+		list = "following " + login
+	}
+	f.record(list + " after " + after)
+	if f.peopleErr != nil {
+		return models.PeoplePage{}, f.peopleErr
+	}
+	all := f.people[list]
+	start := 0
+	if after != "" {
+		start, _ = strconv.Atoi(after)
+	}
+	end := len(all)
+	if f.pageSize > 0 {
+		end = min(end, start+f.pageSize)
+	}
+	page := models.PeoplePage{People: all[start:end], TotalCount: len(all), HasNextPage: end < len(all)}
+	if page.HasNextPage {
+		page.EndCursor = strconv.Itoa(end)
+	}
+	return page, nil
 }
 
 func (f *fakeClient) Readme(_ context.Context, owner, name string) (string, error) {
@@ -100,7 +140,7 @@ func octocat() models.User {
 	return models.User{
 		Login: "octocat",
 		Url:   "https://github.com/octocat",
-		PinnedRepos: []models.Repo{
+		Repos: []models.Repo{
 			{Id: "A", Name: "alpha", Owner: struct{ Login string }{"octocat"}},
 			{Id: "B", Name: "beta", Owner: struct{ Login string }{"octocat"}},
 		},
@@ -218,15 +258,31 @@ var enter = tea.KeyMsg{Type: tea.KeyEnter}
 // without delivering it.
 func lookup(t *testing.T, m Model, login string) (Model, commands.GetUserResponse) {
 	t.Helper()
+	if m.state.Mode == state.NormalMode {
+		m, _ = send(m, keyRunes("/"))
+	}
 	m, _ = send(m, keyRunes(login))
 	m, msgs := send(m, enter)
 	m, msgs = send(m, find[commands.SearchSubmitted](t, msgs))
 	return m, find[commands.GetUserResponse](t, msgs)
 }
 
+// focusRepo presses j until the repo with the given id has focus.
+func focusRepo(t *testing.T, m Model, id string) Model {
+	t.Helper()
+	for range m.state.Targets() {
+		if r := m.state.FocusedRepo(); r != nil && r.Id == id {
+			return m
+		}
+		m, _ = send(m, keyRunes("j"))
+	}
+	t.Fatalf("no repo %s to focus on %q", id, m.state.User.Login)
+	return m
+}
+
 func newModel(t *testing.T, client *fakeClient) Model {
 	t.Helper()
-	m, _ := send(New(client), tea.WindowSizeMsg{Width: 160, Height: 50})
+	m, _ := send(New(client, ""), tea.WindowSizeMsg{Width: 160, Height: 50})
 	return m
 }
 
@@ -236,8 +292,7 @@ func Test_StarResponseLandsAfterFocusMoved(t *testing.T) {
 	m, res := lookup(t, m, "octocat")
 	m, _ = send(m, res)
 
-	m, _ = send(m, keyRunes("j")) // user
-	m, _ = send(m, keyRunes("j")) // alpha
+	m = focusRepo(t, m, "A")
 	m, msgs := send(m, keyRunes("s"))
 	starred := find[commands.StarResponse](t, msgs)
 	if !client.called("star A") {
@@ -245,13 +300,13 @@ func Test_StarResponseLandsAfterFocusMoved(t *testing.T) {
 	}
 
 	// move to beta before alpha's star lands
-	m, _ = send(m, keyRunes("j"))
+	m = focusRepo(t, m, "B")
 	m, _ = send(m, starred)
 
 	if r := m.state.FocusedRepo(); r == nil || r.Id != "B" || r.ViewerHasStarred {
 		t.Fatalf("focused repo = %+v, want unstarred beta", r)
 	}
-	if !m.state.User.PinnedRepos[0].ViewerHasStarred {
+	if !m.state.User.Repos[0].ViewerHasStarred {
 		t.Errorf("alpha lost its star")
 	}
 
@@ -289,9 +344,7 @@ func Test_ReadmeToggle(t *testing.T) {
 	m := newModel(t, client)
 	m, res := lookup(t, m, "octocat")
 	m, _ = send(m, res)
-	for range 3 {
-		m, _ = send(m, keyRunes("j")) // user, alpha, beta
-	}
+	m = focusRepo(t, m, "B")
 
 	m, msgs := send(m, keyRunes("r"))
 	m, _ = send(m, find[commands.GetReadmeResponse](t, msgs))
@@ -326,8 +379,7 @@ func Test_StaleReadmeIsDropped(t *testing.T) {
 		m := newModel(t, client)
 		m, res := lookup(t, m, "octocat")
 		m, _ = send(m, res)
-		m, _ = send(m, keyRunes("j")) // user
-		m, _ = send(m, keyRunes("j")) // alpha
+		m = focusRepo(t, m, "A")
 		return m
 	}
 
@@ -395,8 +447,7 @@ func Test_ReadmeOpenedDuringSearch(t *testing.T) {
 		m, _ = send(m, res)
 		m, _ = send(m, keyRunes("/"))
 		m, hubot := lookup(t, m, "hubot")
-		m, _ = send(m, keyRunes("j")) // user
-		m, _ = send(m, keyRunes("j")) // alpha
+		m = focusRepo(t, m, "A")
 		m, msgs := send(m, keyRunes("r"))
 		return m, hubot, find[commands.GetReadmeResponse](t, msgs)
 	}
@@ -464,7 +515,7 @@ func Test_OrganizationProfile(t *testing.T) {
 		Login:          "acme",
 		Name:           "Acme",
 		Bio:            "we make things",
-		PinnedRepos:    []models.Repo{{Id: "R_9", Name: "anvil", Owner: struct{ Login string }{"acme"}}},
+		Repos:          []models.Repo{{Id: "R_9", Name: "anvil", Owner: struct{ Login string }{"acme"}}},
 	}
 	client := &fakeClient{users: map[string]models.User{"acme": acme}}
 	m := newModel(t, client)
@@ -499,8 +550,7 @@ func Test_NoticeKeepsTheView(t *testing.T) {
 	m := newModel(t, client)
 	m, res := lookup(t, m, "octocat")
 	m, _ = send(m, res)
-	m, _ = send(m, keyRunes("j"))
-	m, _ = send(m, keyRunes("j")) // alpha
+	m = focusRepo(t, m, "A")
 	m, msgs := send(m, keyRunes("r"))
 	m, _ = send(m, find[commands.GetReadmeResponse](t, msgs))
 
@@ -524,7 +574,7 @@ func Test_NoticeKeepsTheView(t *testing.T) {
 
 func Test_StarGhEcoIsInstantAndRevertsOnFailure(t *testing.T) {
 	// a profile that pins gh-eco, so the star shows on its card
-	owner := models.User{Login: "jrnxf", PinnedRepos: []models.Repo{
+	owner := models.User{Login: "jrnxf", Repos: []models.Repo{
 		{Id: github.GhEcoRepoID, Name: "gh-eco", StarsCount: 482},
 	}}
 	client := &fakeClient{
@@ -536,7 +586,7 @@ func Test_StarGhEcoIsInstantAndRevertsOnFailure(t *testing.T) {
 	m, _ = send(m, res)
 
 	m, msgs := send(m, keyRunes("!"))
-	if r := m.state.PinnedRepo(github.GhEcoRepoID); !r.ViewerHasStarred || r.StarsCount != 483 {
+	if r := m.state.Repo(github.GhEcoRepoID); !r.ViewerHasStarred || r.StarsCount != 483 {
 		t.Fatalf("star not shown at once: %+v", r)
 	}
 	if msg := find[commands.SetMessage](t, msgs); !strings.Contains(msg.Content, "tysm") {
@@ -544,7 +594,7 @@ func Test_StarGhEcoIsInstantAndRevertsOnFailure(t *testing.T) {
 	}
 
 	m, msgs = send(m, find[commands.StarResponse](t, msgs))
-	if r := m.state.PinnedRepo(github.GhEcoRepoID); r.ViewerHasStarred || r.StarsCount != 482 {
+	if r := m.state.Repo(github.GhEcoRepoID); r.ViewerHasStarred || r.StarsCount != 482 {
 		t.Errorf("failed star not reverted: %+v", r)
 	}
 	m, _ = send(m, find[commands.SetMessage](t, msgs))
@@ -554,7 +604,7 @@ func Test_StarGhEcoIsInstantAndRevertsOnFailure(t *testing.T) {
 }
 
 func Test_StarGhEcoKeepsAnExistingStarOnFailure(t *testing.T) {
-	owner := models.User{Login: "jrnxf", PinnedRepos: []models.Repo{
+	owner := models.User{Login: "jrnxf", Repos: []models.Repo{
 		{Id: github.GhEcoRepoID, Name: "gh-eco", StarsCount: 482, ViewerHasStarred: true},
 	}}
 	client := &fakeClient{
@@ -567,7 +617,7 @@ func Test_StarGhEcoKeepsAnExistingStarOnFailure(t *testing.T) {
 
 	m, msgs := send(m, keyRunes("!"))
 	m, _ = send(m, find[commands.StarResponse](t, msgs))
-	if r := m.state.PinnedRepo(github.GhEcoRepoID); !r.ViewerHasStarred || r.StarsCount != 482 {
+	if r := m.state.Repo(github.GhEcoRepoID); !r.ViewerHasStarred || r.StarsCount != 482 {
 		t.Errorf("a failed ! removed a star the viewer already had: %+v", r)
 	}
 }
@@ -593,8 +643,7 @@ func Test_SpinnerOnlyWhileTheNetworkIsBusy(t *testing.T) {
 		t.Errorf("spinner outlived the search: %q", bottomRow(m))
 	}
 
-	m, _ = send(m, keyRunes("j"))
-	m, _ = send(m, keyRunes("j")) // alpha
+	m = focusRepo(t, m, "A")
 	m, msgs := send(m, keyRunes("r"))
 	if !strings.Contains(bottomRow(m), "loading readme") {
 		t.Errorf("no spinner while the readme loads: %q", bottomRow(m))
@@ -624,8 +673,7 @@ func Test_FailedReadmeIsQuietOnceTheUserMovesOn(t *testing.T) {
 	m := newModel(t, client)
 	m, res := lookup(t, m, "octocat")
 	m, _ = send(m, res)
-	m, _ = send(m, keyRunes("j"))
-	m, _ = send(m, keyRunes("j")) // alpha, which has no readme
+	m = focusRepo(t, m, "A")
 
 	m, msgs := send(m, keyRunes("r"))
 	failed := find[commands.GetReadmeResponse](t, msgs)
@@ -666,8 +714,7 @@ func Test_StarIsInstantAndRevertsOnFailure(t *testing.T) {
 	m := newModel(t, client)
 	m, res := lookup(t, m, "octocat")
 	m, _ = send(m, res)
-	m, _ = send(m, keyRunes("j"))
-	m, _ = send(m, keyRunes("j")) // alpha
+	m = focusRepo(t, m, "A")
 	stars := m.state.FocusedRepo().StarsCount
 
 	m, msgs := send(m, keyRunes("s"))
@@ -690,8 +737,7 @@ func Test_StarIgnoresPressesWhileInFlight(t *testing.T) {
 	m := newModel(t, client)
 	m, res := lookup(t, m, "octocat")
 	m, _ = send(m, res)
-	m, _ = send(m, keyRunes("j"))
-	m, _ = send(m, keyRunes("j")) // alpha
+	m = focusRepo(t, m, "A")
 
 	m, first := send(m, keyRunes("s"))
 	starred := find[commands.StarResponse](t, first)
@@ -733,7 +779,7 @@ func Test_ReadmeHelpOffersStarOnlyForRepos(t *testing.T) {
 	}
 
 	m, _ = send(m, keyRunes("r"))
-	m, _ = send(m, keyRunes("j")) // alpha
+	m = focusRepo(t, m, "A")
 	m, msgs = send(m, keyRunes("r"))
 	m, _ = send(m, find[commands.GetReadmeResponse](t, msgs))
 	if !strings.Contains(bottomRow(m), "star repo") {

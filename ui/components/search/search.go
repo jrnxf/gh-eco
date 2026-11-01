@@ -22,6 +22,10 @@ func NewModel(s *state.State) Model {
 	ti := textinput.New()
 	ti.Focus()
 	ti.Placeholder = "search by username"
+	if s.Mode == state.NormalMode {
+		// a profile is loading; / starts typing
+		ti.Cursor.SetMode(cursor.CursorHide)
+	}
 
 	return Model{
 		keys:      keys.Keys,
@@ -46,7 +50,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			}
 
 		case state.NormalMode:
-			if key.Matches(msg, m.keys.FocusInput) && m.state.CurrentView == state.UserView {
+			if key.Matches(msg, m.keys.FocusInput) && m.state.CurrentView != state.ReadmeView {
 				m.textInput.Reset()
 				m.state.Mode = state.InsertMode
 				return m, m.textInput.Cursor.SetMode(cursor.CursorBlink)
@@ -60,6 +64,14 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 	}
 	return m, tea.Batch(cmds...)
+}
+
+// SetLogin shows login as the search, so the bar names the profile on
+// screen. It leaves a search being typed alone.
+func (m *Model) SetLogin(login string) {
+	if m.state.Mode == state.NormalMode {
+		m.textInput.SetValue(login)
+	}
 }
 
 func (m Model) View() string {

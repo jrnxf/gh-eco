@@ -9,7 +9,8 @@ type SetMessage struct {
 	SecondsDisplayed int
 }
 
-// SearchSubmitted asks the root model to look up Login.
+// SearchSubmitted asks the root model to look up Login, or the viewer's
+// own profile when Login is empty.
 type SearchSubmitted struct {
 	Login string
 }
@@ -20,6 +21,13 @@ type GetUserResponse struct {
 	Login string
 	User  models.User
 	Err   error
+}
+
+type GetPeopleResponse struct {
+	// Req identifies the request; responses to superseded requests are dropped.
+	Req  int
+	Page models.PeoplePage
+	Err  error
 }
 
 type GetReadmeResponse struct {

@@ -56,13 +56,19 @@ Stars](https://img.shields.io/github/stars/jrnxf/gh-eco)](https://github.com/jrn
 
 ## Usage
 
-to run:
+to open your own profile:
 
 ```sh
 gh eco
 ```
 
-Press `/` and type any user or organisation login.
+to open any user or organisation:
+
+```sh
+gh eco <login>
+```
+
+Press `/` to search for another login. Move to a user's followers or following count and press `enter` to list them, `enter` again to open someone's profile, and `backspace` to go back. Profiles with nothing pinned show their most-starred repositories instead.
 
 gh-eco follows your terminal's light or dark background; if it guesses wrong, set `GH_ECO_THEME=light` or `GH_ECO_THEME=dark`.
 
@@ -77,11 +83,12 @@ gh extension upgrade eco
 | Key | Action |
 | --- | --- |
 | `/` | focus input / search |
-| `enter` | search |
+| `enter` | search / open list / open profile |
+| `backspace` | back to the previous page |
 | `j` / `↓` | move down |
 | `k` / `↑` | move up |
-| `ctrl+d` | page down (readme) |
-| `ctrl+u` | page up (readme) |
+| `ctrl+d` | page down (readme, list) |
+| `ctrl+u` | page up (readme, list) |
 | `r` | toggle readme |
 | `o` | open in github |
 | `s` | star repo |

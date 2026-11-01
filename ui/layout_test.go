@@ -45,7 +45,7 @@ func busyUser() models.User {
 		if i != 3 {
 			r.PrimaryLanguage.Name, r.PrimaryLanguage.Color = "Go", "#00ADD8"
 		}
-		u.PinnedRepos = append(u.PinnedRepos, r)
+		u.Repos = append(u.Repos, r)
 	}
 	for range 53 {
 		var w models.WeeklyContribution
@@ -81,6 +81,11 @@ func Test_FrameFitsScreen(t *testing.T) {
 	client := &fakeClient{
 		users:   map[string]models.User{"octocat": busyUser()},
 		readmes: map[string]string{"octocat/octocat": "# hi\n\n🤘🏼 " + strings.Repeat("word ", 300)},
+		people: map[string][]models.Person{"followers octocat": {
+			{Login: "a-rather-long-login-name-indeed", Name: "🤘🏼 " + strings.Repeat("Very Long Name ", 6)},
+			{Login: "kanji", Name: "漢字の名前"},
+			{Login: "plain"},
+		}},
 	}
 	for width := 30; width <= 200; width++ {
 		heights := []int{24}
@@ -91,7 +96,7 @@ func Test_FrameFitsScreen(t *testing.T) {
 			heights = append(heights, 20)
 		}
 		for _, height := range heights {
-			m, _ := send(New(client), tea.WindowSizeMsg{Width: width, Height: height})
+			m, _ := send(New(client, ""), tea.WindowSizeMsg{Width: width, Height: height})
 			m, res := lookup(t, m, "octocat")
 			m, _ = send(m, res)
 
@@ -105,9 +110,7 @@ func Test_FrameFitsScreen(t *testing.T) {
 			checkFrame(t, m.View(), width, height)
 
 			// walking focus to the last pin scrolls it into view
-			for range len(busyUser().PinnedRepos) {
-				m, _ = send(m, keyRunes("j"))
-			}
+			m = focusRepo(t, m, "R_5")
 			checkFrame(t, m.View(), width, height)
 			if !strings.Contains(m.View(), "repo-5") {
 				t.Fatalf("%dx%d: focused repo-5 is not on screen", width, height)
@@ -123,16 +126,24 @@ func Test_FrameFitsScreen(t *testing.T) {
 				t.Fatalf("%dx%d: readme did not open", width, height)
 			}
 			checkFrame(t, m.View(), width, height)
+
+			// followers list
+			m, _ = send(m, keyRunes("r"))
+			m = openList(t, m, state.FollowersTarget)
+			checkFrame(t, m.View(), width, height)
+			if !strings.Contains(m.View(), "plain") {
+				t.Fatalf("%dx%d: followers list is cut off:\n%s", width, height, m.View())
+			}
 		}
 	}
 }
 
 func Test_ScrollStartsOnACardRow(t *testing.T) {
 	client := &fakeClient{users: map[string]models.User{"octocat": busyUser()}}
-	m, _ := send(New(client), tea.WindowSizeMsg{Width: 80, Height: 24})
+	m, _ := send(New(client, ""), tea.WindowSizeMsg{Width: 80, Height: 24})
 	m, res := lookup(t, m, "octocat")
 	m, _ = send(m, res)
-	for range len(busyUser().PinnedRepos) + 1 {
+	for range len(m.state.Targets()) - 1 {
 		m, _ = send(m, keyRunes("j"))
 		// the first content row is never the bottom half of a card
 		first := strings.TrimSpace(strings.Split(m.View(), "\n")[2])
@@ -144,12 +155,10 @@ func Test_ScrollStartsOnACardRow(t *testing.T) {
 
 func Test_ResizeKeepsFocusedCardVisible(t *testing.T) {
 	client := &fakeClient{users: map[string]models.User{"octocat": busyUser()}}
-	m, _ := send(New(client), tea.WindowSizeMsg{Width: 160, Height: 50})
+	m, _ := send(New(client, ""), tea.WindowSizeMsg{Width: 160, Height: 50})
 	m, res := lookup(t, m, "octocat")
 	m, _ = send(m, res)
-	for range len(busyUser().PinnedRepos) + 1 {
-		m, _ = send(m, keyRunes("j"))
-	}
+	m = focusRepo(t, m, "R_5")
 	if r := m.state.FocusedRepo(); r == nil || r.Name != "repo-5" {
 		t.Fatalf("focused repo = %+v, want repo-5", r)
 	}
@@ -166,7 +175,7 @@ func Test_ResizeKeepsFocusedCardVisible(t *testing.T) {
 
 func Test_FocusNeverMovesTheLayout(t *testing.T) {
 	client := &fakeClient{users: map[string]models.User{"octocat": busyUser()}}
-	m, _ := send(New(client), tea.WindowSizeMsg{Width: 160, Height: 50})
+	m, _ := send(New(client, ""), tea.WindowSizeMsg{Width: 160, Height: 50})
 	m, res := lookup(t, m, "octocat")
 	m, _ = send(m, res)
 
@@ -185,7 +194,7 @@ func Test_FocusNeverMovesTheLayout(t *testing.T) {
 	for _, s := range marks {
 		before[s] = rowOf(m.View(), s)
 	}
-	for range len(busyUser().PinnedRepos) + 1 { // the profile, then every card
+	for range len(m.state.Targets()) - 1 { // the profile, its counts, then every card
 		m, _ = send(m, keyRunes("j"))
 		for _, s := range marks {
 			if got := rowOf(m.View(), s); got != before[s] {

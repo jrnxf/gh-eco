@@ -15,6 +15,9 @@ type KeyMap struct {
 	StarGhEco       key.Binding
 	FocusInput      key.Binding
 	Search          key.Binding
+	OpenList        key.Binding
+	OpenProfile     key.Binding
+	Back            key.Binding
 	Quit            key.Binding
 }
 
@@ -58,6 +61,18 @@ var Keys = KeyMap{
 	Search: key.NewBinding(
 		key.WithKeys("enter"),
 		key.WithHelp("enter", "search"),
+	),
+	OpenList: key.NewBinding(
+		key.WithKeys("enter"),
+		key.WithHelp("enter", "open list"),
+	),
+	OpenProfile: key.NewBinding(
+		key.WithKeys("enter"),
+		key.WithHelp("enter", "open profile"),
+	),
+	Back: key.NewBinding(
+		key.WithKeys("backspace"),
+		key.WithHelp("backspace", "back"),
 	),
 	FocusInput: key.NewBinding(
 		key.WithKeys("/"),

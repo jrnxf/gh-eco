@@ -3,7 +3,6 @@ package user
 import (
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -26,7 +25,7 @@ const wheelLines = 3
 
 type Model struct {
 	lines []string
-	// login is the latest search.
+	// login is the latest lookup, empty for the viewer's own profile.
 	login string
 	// offset is the first visible line.
 	offset int
@@ -63,6 +62,12 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, nil
 }
 
+// Reset forgets the last lookup's error and scroll position, for a page
+// restored from history.
+func (m *Model) Reset() {
+	m.err, m.offset, m.focus = nil, 0, -1
+}
+
 func (m *Model) build() {
 	width := max(0, m.state.Layout.ContentWidth-state.RightSlack)
 	u := m.state.User
@@ -72,18 +77,26 @@ func (m *Model) build() {
 	case errors.Is(m.err, github.ErrNotFound):
 		blocks = append(blocks, text.Ellipsize(fmt.Sprintf("no user or organization named %q", m.login), width))
 	case m.err != nil:
+		what := fmt.Sprintf("%q", m.login)
+		if m.login == "" {
+			what = "your profile"
+		}
 		blocks = append(blocks, lipgloss.NewStyle().
 			Width(min(width, maxErrorWidth)).
-			Render(fmt.Sprintf("couldn't load %q: %v", m.login, m.err)))
+			Render(fmt.Sprintf("couldn't load %s: %v", what, m.err)))
 	case u.Login != "":
 		blocks = append(blocks, m.header(width)...)
 		blocks = append(blocks, "")
 		if !u.IsOrganization {
 			blocks = append(blocks,
-				text.Ellipsize(countOf(u.ActivityGraph.ContributionsCount)+" contributions in the last year", width),
+				text.Ellipsize(text.Count(u.ActivityGraph.ContributionsCount)+" contributions in the last year", width),
 				graph.BuildGraphDisplay(fitWeeks(u.ActivityGraph.Weeks, width)),
 				"",
 			)
+		}
+		if u.TopRepos {
+			// nothing is pinned, so the grid holds the most-starred repos
+			blocks = append(blocks, styles.Muted().Render(text.Ellipsize("top repositories", width)))
 		}
 	}
 
@@ -99,7 +112,7 @@ func (m *Model) build() {
 		if t := m.state.Focused(); t.Kind == state.RepoTarget {
 			focused = t.Repo
 		}
-		grid, height, top, bottom := repo.Grid(u.PinnedRepos, focused, width)
+		grid, height, top, bottom := repo.Grid(u.Repos, focused, width)
 		gridTop, rowHeight = len(lines), height
 		if top >= 0 {
 			focusTop, focusBottom = len(lines)+top, len(lines)+bottom
@@ -149,13 +162,21 @@ func (m Model) header(width int) []string {
 	}
 
 	italic := lipgloss.NewStyle().Italic(true)
+	// a focused count opens its list
+	count := func(n int, label string, target state.TargetKind) string {
+		s := text.Count(n) + " " + label
+		if m.state.Focused().Kind == target {
+			return styles.FocusedName.Render(s)
+		}
+		return s
+	}
 	var stats []string
 	if !u.IsOrganization {
-		followers := countOf(u.FollowersCount) + " followers"
+		followers := count(u.FollowersCount, "followers", state.FollowersTarget)
 		if u.ViewerIsFollowing {
 			followers += italic.Render(" (you follow)")
 		}
-		following := countOf(u.FollowingCount) + " following"
+		following := count(u.FollowingCount, "following", state.FollowingTarget)
 		if u.IsFollowingViewer {
 			following += italic.Render(" (follows you)")
 		}
@@ -174,18 +195,6 @@ func (m Model) header(width int) []string {
 		blocks = append(blocks, text.Ellipsize(strings.Join(stats, " · "), width))
 	}
 	return blocks
-}
-
-// countOf formats n with thousands separators, as GitHub does.
-func countOf(n int) string {
-	s := strconv.Itoa(n)
-	if n < 0 {
-		return "-" + countOf(-n)
-	}
-	for i := len(s) - 3; i > 0; i -= 3 {
-		s = s[:i] + "," + s[i:]
-	}
-	return s
 }
 
 // snapToRow moves an offset that falls inside the card grid down to the
