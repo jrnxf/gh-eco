@@ -52,8 +52,8 @@ type Model struct {
 	// while it is unanswered.
 	readmeReq     int
 	readmePending bool
-	// starReq identifies the latest star toggle per repo id.
-	starReq map[string]int
+	// starPending holds the repo ids with a star toggle in flight.
+	starPending map[string]bool
 }
 
 // Labels for the loading spinner.
@@ -65,16 +65,16 @@ const (
 func New(client Client) Model {
 	s := &state.State{Mode: state.InsertMode, CurrentView: state.UserView}
 	return Model{
-		client:   client,
-		state:    s,
-		keys:     keys.Keys,
-		search:   search.NewModel(s),
-		user:     user.NewModel(s),
-		markdown: markdown.NewModel(s),
-		help:     help.NewModel(s),
-		message:  message.NewModel(s),
-		loading:  loading.New(),
-		starReq:  map[string]int{},
+		client:      client,
+		state:       s,
+		keys:        keys.Keys,
+		search:      search.NewModel(s),
+		user:        user.NewModel(s),
+		markdown:    markdown.NewModel(s),
+		help:        help.NewModel(s),
+		message:     message.NewModel(s),
+		loading:     loading.New(),
+		starPending: map[string]bool{},
 	}
 }
 
@@ -137,10 +137,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case commands.StarResponse:
-		if msg.Req != m.starReq[msg.Id] {
-			// a newer toggle of the same repo owns its state now
-			break
-		}
+		delete(m.starPending, msg.Id)
 		r := s.PinnedRepo(msg.Id)
 		if msg.Err != nil {
 			if r != nil {
@@ -197,26 +194,29 @@ func (m *Model) handleNormalKey(msg tea.KeyMsg) tea.Cmd {
 		}
 
 	case key.Matches(msg, m.keys.StarRepo):
-		if r := s.FocusedRepo(); r != nil {
+		if r := s.FocusedRepo(); r != nil && !m.starPending[r.Id] {
 			// show the new state at once; a failure flips it back
 			unstar := r.ViewerHasStarred
 			setStarred(r, !unstar)
-			m.starReq[r.Id]++
-			return star(m.client, r.Id, unstar, unstar, m.starReq[r.Id])
+			m.starPending[r.Id] = true
+			return star(m.client, r.Id, unstar, unstar)
 		}
 
 	case key.Matches(msg, m.keys.StarGhEco):
 		// thank at once and show the star if gh-eco is pinned here; a
 		// failure replaces the thanks and restores the card
+		if m.starPending[github.GhEcoRepoID] {
+			break
+		}
 		prev := false
 		if r := s.PinnedRepo(github.GhEcoRepoID); r != nil {
 			prev = r.ViewerHasStarred
 			setStarred(r, true)
 		}
-		m.starReq[github.GhEcoRepoID]++
+		m.starPending[github.GhEcoRepoID] = true
 		return tea.Batch(
 			message.Show("tysm 🥹", 2),
-			star(m.client, github.GhEcoRepoID, false, prev, m.starReq[github.GhEcoRepoID]),
+			star(m.client, github.GhEcoRepoID, false, prev),
 		)
 
 	case key.Matches(msg, m.keys.ToggleReadme):
@@ -332,14 +332,14 @@ func (m *Model) openReadme(ref readmeRef) tea.Cmd {
 
 // star stars id, or removes the star when starred is true. prev is the
 // state a failure restores.
-func star(c Client, id string, starred, prev bool, req int) tea.Cmd {
+func star(c Client, id string, starred, prev bool) tea.Cmd {
 	return func() tea.Msg {
 		do := c.Star
 		if starred {
 			do = c.Unstar
 		}
 		s, err := do(context.Background(), id)
-		return commands.StarResponse{Req: req, Id: id, Unstar: starred, Prev: prev, Starrable: s, Err: err}
+		return commands.StarResponse{Id: id, Unstar: starred, Prev: prev, Starrable: s, Err: err}
 	}
 }
 

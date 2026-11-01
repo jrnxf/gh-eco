@@ -638,7 +638,7 @@ func Test_StarIsInstantAndRevertsOnFailure(t *testing.T) {
 	}
 }
 
-func Test_OnlyTheLatestStarToggleCounts(t *testing.T) {
+func Test_StarIgnoresPressesWhileInFlight(t *testing.T) {
 	client := &fakeClient{users: map[string]models.User{"octocat": octocat()}}
 	m := newModel(t, client)
 	m, res := lookup(t, m, "octocat")
@@ -646,16 +646,26 @@ func Test_OnlyTheLatestStarToggleCounts(t *testing.T) {
 	m, _ = send(m, keyRunes("j"))
 	m, _ = send(m, keyRunes("j")) // alpha
 
-	m, first := send(m, keyRunes("s"))  // star
-	m, second := send(m, keyRunes("s")) // and straight back
+	m, first := send(m, keyRunes("s"))
 	starred := find[commands.StarResponse](t, first)
-	unstarred := find[commands.StarResponse](t, second)
+	m, second := send(m, keyRunes("s")) // before the star lands
+	if _, ok := firstOf[commands.StarResponse](second.all(t)); ok || client.called("unstar A") {
+		t.Fatalf("a second toggle went out while the first was in flight: calls %v", client.calls)
+	}
+	if r := m.state.FocusedRepo(); !r.ViewerHasStarred {
+		t.Errorf("the ignored press flipped the card: %+v", r)
+	}
 
-	// the star lands after the unstar: it must not re-star alpha
-	m, _ = send(m, unstarred)
 	m, _ = send(m, starred)
-	if r := m.state.FocusedRepo(); r.ViewerHasStarred {
-		t.Errorf("an older toggle overrode the latest: %+v", r)
+	if r := m.state.FocusedRepo(); !r.ViewerHasStarred || r.StarsCount != 1 {
+		t.Errorf("card does not match the server: %+v", r)
+	}
+
+	// once it lands, s toggles again
+	_, msgs := send(m, keyRunes("s"))
+	find[commands.StarResponse](t, msgs)
+	if !client.called("unstar A") {
+		t.Errorf("s after the response did not unstar: calls %v", client.calls)
 	}
 }
 

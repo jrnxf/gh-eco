@@ -30,8 +30,6 @@ type GetReadmeResponse struct {
 }
 
 type StarResponse struct {
-	// Req identifies the toggle; only the latest per repo may change it.
-	Req int
 	// Id is the starrable the toggle was for, set even when it failed.
 	Id string
 	// Unstar is true when the request removed a star.
