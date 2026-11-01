@@ -62,13 +62,15 @@ to run:
 gh eco
 ```
 
-or view an organisation:
-
-```sh
-gh eco <organisation>
-```
+Press `/` and type any user or organisation login.
 
 gh-eco follows your terminal's light or dark background; if it guesses wrong, set `GH_ECO_THEME=light` or `GH_ECO_THEME=dark`.
+
+to upgrade:
+
+```sh
+gh extension upgrade eco
+```
 
 ## Keys
 
@@ -85,12 +87,6 @@ gh-eco follows your terminal's light or dark background; if it guesses wrong, se
 | `s` | star repo |
 | `!` | star gh-eco |
 | `esc` / `ctrl+c` | quit |
-
-to upgrade:
-
-```sh
-gh extension upgrade eco
-```
 
 ## Roadmap
 
