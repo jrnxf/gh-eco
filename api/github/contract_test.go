@@ -50,11 +50,9 @@ func (f *fakeGitHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		req.query, req.variables = payload.Query, payload.Variables
 		for name, response := range f.graphql {
-			// an operation without variables has no parameter list
-			for _, prefix := range []string{"query " + name + "(", "query " + name + "{", "mutation " + name + "("} {
-				if strings.HasPrefix(payload.Query, prefix) {
-					body = response
-				}
+			if strings.HasPrefix(payload.Query, "query "+name+"(") ||
+				strings.HasPrefix(payload.Query, "mutation "+name+"(") {
+				body = response
 			}
 		}
 	} else {
@@ -212,19 +210,6 @@ func Test_NoReposAtAll(t *testing.T) {
 	}
 	if len(u.Repos) != 0 || u.TopRepos {
 		t.Errorf("repos = %+v, top = %v; want none, not labelled as top repos", u.Repos, u.TopRepos)
-	}
-}
-
-func Test_ViewerContract(t *testing.T) {
-	fake := &fakeGitHub{graphql: map[string]string{"GetViewer": `{"data":{"viewer":{"login":"octocat"}}}`}}
-	c := newFake(t, fake)
-
-	login, err := c.Viewer(context.Background())
-	if err != nil || login != "octocat" {
-		t.Fatalf("viewer = %q, %v", login, err)
-	}
-	if want := `query GetViewer{viewer{login}}`; fake.requests[0].query != want {
-		t.Errorf("query changed:\n got %s\nwant %s", fake.requests[0].query, want)
 	}
 }
 

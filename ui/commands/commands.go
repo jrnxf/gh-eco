@@ -9,8 +9,7 @@ type SetMessage struct {
 	SecondsDisplayed int
 }
 
-// SearchSubmitted asks the root model to look up Login, or the viewer's
-// own profile when Login is empty.
+// SearchSubmitted asks the root model to look up Login.
 type SearchSubmitted struct {
 	Login string
 }

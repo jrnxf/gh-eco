@@ -15,8 +15,8 @@ import (
 
 var backspace = tea.KeyMsg{Type: tea.KeyBackspace}
 
-// launch starts the program as main does, opening login or the viewer's
-// own profile, and delivers the first lookup.
+// launch starts the program as main does with a login, and delivers the
+// first lookup.
 func launch(t *testing.T, client *fakeClient, login string, width, height int) Model {
 	t.Helper()
 	m, _ := send(New(client, login), tea.WindowSizeMsg{Width: width, Height: height})
@@ -58,11 +58,8 @@ func Test_LaunchOpensTheGivenLogin(t *testing.T) {
 	if m.state.User.Login != "octocat" || m.state.Mode != state.NormalMode {
 		t.Fatalf("launch with octocat shows %q in mode %v", m.state.User.Login, m.state.Mode)
 	}
-	if client.called("viewer") {
-		t.Errorf("looked up the viewer though a login was given")
-	}
-	if !strings.HasPrefix(strings.Split(m.View(), "\n")[1], "> octocat") {
-		t.Errorf("search bar does not name the profile:\n%s", m.View())
+	if trail, search := topRows(m); trail != "octocat" || search != "" {
+		t.Errorf("top rows are %q and %q, want the trail and no search line", trail, search)
 	}
 
 	// / still searches
@@ -85,20 +82,22 @@ func Test_LaunchWithUnknownLoginShowsNotFound(t *testing.T) {
 	}
 }
 
-func Test_LaunchWithoutLoginOpensTheViewer(t *testing.T) {
-	client := &fakeClient{viewer: "octocat", users: map[string]models.User{"octocat": octocat()}}
-	m := launch(t, client, "", 80, 24)
-	if m.state.User.Login != "octocat" || !client.called("user octocat") {
-		t.Fatalf("launch without a login shows %q: calls %v", m.state.User.Login, client.calls)
+func Test_LaunchWithoutLoginStartsInTheSearchBox(t *testing.T) {
+	client := &fakeClient{users: map[string]models.User{"octocat": octocat()}}
+	m, _ := send(New(client, ""), tea.WindowSizeMsg{Width: 80, Height: 24})
+	if _, ok := firstOf[commands.SearchSubmitted](run(m.Init()).all(t)); ok {
+		t.Errorf("launch without a login looked someone up")
 	}
-	if !strings.HasPrefix(strings.Split(m.View(), "\n")[1], "> octocat") {
-		t.Errorf("search bar does not name the viewer:\n%s", m.View())
+	if m.state.Mode != state.InsertMode || len(client.calls) > 0 {
+		t.Fatalf("launch without a login is in mode %v after calls %v", m.state.Mode, client.calls)
+	}
+	if _, search := topRows(m); !strings.Contains(search, "search by username") {
+		t.Errorf("search box is not showing: %q", search)
 	}
 
-	client = &fakeClient{viewerErr: errors.New("HTTP 401: Bad credentials")}
-	m = launch(t, client, "", 80, 24)
-	if !strings.Contains(m.View(), "couldn't load your profile: HTTP 401") {
-		t.Errorf("failed viewer lookup does not say so:\n%s", m.View())
+	m, res := lookup(t, m, "octocat")
+	if m, _ = send(m, res); m.state.User.Login != "octocat" {
+		t.Errorf("search from launch failed")
 	}
 }
 
@@ -125,12 +124,20 @@ func Test_HopThroughFollowersAndBack(t *testing.T) {
 	// hop to bob, the second follower
 	m, _ = send(m, keyRunes("j"))
 	m, msgs := send(m, enter)
+	// alice's list stays under the spinner until bob arrives, and nothing
+	// names alice as the profile being shown
+	if trail, search := topRows(m); trail != "alice › bob" || search != "" {
+		t.Errorf("while bob loads the top rows are %q and %q", trail, search)
+	}
+	if view := m.View(); !strings.Contains(view, "loading bob…") || !strings.Contains(view, "carol") || strings.Contains(bottomRow(m), "loading") {
+		t.Errorf("bob's spinner is not over the dimmed list:\n%s", view)
+	}
 	m, _ = send(m, find[commands.GetUserResponse](t, msgs))
 	if m.state.User.Login != "bob" || m.state.CurrentView != state.UserView {
 		t.Fatalf("enter on bob shows %q in view %v", m.state.User.Login, m.state.CurrentView)
 	}
-	if !strings.HasPrefix(strings.Split(m.View(), "\n")[1], "> bob") {
-		t.Errorf("search bar still names the old profile:\n%s", m.View())
+	if strings.Contains(m.View(), "loading") {
+		t.Errorf("spinner outlived the hop:\n%s", m.View())
 	}
 
 	// and on through bob's following, back to alice
@@ -141,21 +148,30 @@ func Test_HopThroughFollowersAndBack(t *testing.T) {
 		t.Fatalf("hop from bob's following shows %q", m.state.User.Login)
 	}
 
-	// backspace retraces every step, then stops on the first profile
+	if trail, _ := topRows(m); trail != "alice › bob › alice" {
+		t.Errorf("trail after two hops is %q", trail)
+	}
+
+	// backspace retraces every step, shrinking the trail, then stops on
+	// the first profile
 	steps := []struct {
 		login string
 		view  state.View
+		trail string
 	}{
-		{"bob", state.PeopleView},
-		{"bob", state.UserView},
-		{"alice", state.PeopleView},
-		{"alice", state.UserView},
-		{"alice", state.UserView},
+		{"bob", state.PeopleView, "alice › bob"},
+		{"bob", state.UserView, "alice › bob"},
+		{"alice", state.PeopleView, "alice"},
+		{"alice", state.UserView, "alice"},
+		{"alice", state.UserView, "alice"},
 	}
 	for i, want := range steps {
 		m, _ = send(m, backspace)
 		if m.state.User.Login != want.login || m.state.CurrentView != want.view {
 			t.Fatalf("backspace %d shows %q in view %v, want %q in %v", i+1, m.state.User.Login, m.state.CurrentView, want.login, want.view)
+		}
+		if trail, _ := topRows(m); trail != want.trail {
+			t.Errorf("backspace %d leaves the trail %q, want %q", i+1, trail, want.trail)
 		}
 		if want.view == state.PeopleView && want.login == "alice" {
 			if p := m.state.People.SelectedPerson(); p == nil || p.Login != "bob" {

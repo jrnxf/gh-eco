@@ -56,13 +56,13 @@ Stars](https://img.shields.io/github/stars/jrnxf/gh-eco)](https://github.com/jrn
 
 ## Usage
 
-to open your own profile:
+to search for a user or organisation:
 
 ```sh
 gh eco
 ```
 
-to open any user or organisation:
+to open one straight away:
 
 ```sh
 gh eco <login>

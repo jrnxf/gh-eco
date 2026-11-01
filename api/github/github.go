@@ -82,15 +82,6 @@ func (c *Client) User(ctx context.Context, login string) (models.User, error) {
 	return u, nil
 }
 
-// Viewer fetches the login of the authenticated user.
-func (c *Client) Viewer(ctx context.Context) (string, error) {
-	var query queries.GetViewerQuery
-	if err := c.gql.QueryWithContext(ctx, "GetViewer", &query, nil); err != nil {
-		return "", err
-	}
-	return query.Viewer.Login, nil
-}
-
 // People fetches one page of a user's followers or of the people they
 // follow, continuing after the cursor after, or from the start when it is
 // empty.

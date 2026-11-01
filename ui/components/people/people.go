@@ -50,8 +50,8 @@ func (m Model) rows() int {
 }
 
 // View shows the title and the visible entries, exactly ContentHeight
-// lines.
-func (m Model) View() string {
+// lines. A non-empty spinner goes where the next entries will appear.
+func (m Model) View(spinner string) string {
 	width := max(0, m.state.Layout.ContentWidth-state.RightSlack)
 	p := m.state.People
 
@@ -64,6 +64,11 @@ func (m Model) View() string {
 		for i := p.Offset; i < end; i++ {
 			lines = append(lines, pad+row(p.List[i], i == p.Selected, column))
 		}
+		if spinner != "" {
+			lines = append(lines, center(spinner, width))
+		}
+	case spinner != "":
+		lines = append(lines, center(spinner, width))
 	case p.Failed:
 		lines = append(lines, center("couldn't load "+Noun(p.Kind), width))
 	case p.Loaded:

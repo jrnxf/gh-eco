@@ -83,13 +83,6 @@ type Repository struct {
 	}
 }
 
-// GetViewerQuery looks up the authenticated user's login.
-type GetViewerQuery struct {
-	Viewer struct {
-		Login string
-	}
-}
-
 // GetFollowersQuery pages through the people who follow a user.
 type GetFollowersQuery struct {
 	User struct {

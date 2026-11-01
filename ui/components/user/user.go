@@ -25,7 +25,7 @@ const wheelLines = 3
 
 type Model struct {
 	lines []string
-	// login is the latest lookup, empty for the viewer's own profile.
+	// login is the latest lookup.
 	login string
 	// offset is the first visible line.
 	offset int
@@ -77,13 +77,9 @@ func (m *Model) build() {
 	case errors.Is(m.err, github.ErrNotFound):
 		blocks = append(blocks, text.Ellipsize(fmt.Sprintf("no user or organization named %q", m.login), width))
 	case m.err != nil:
-		what := fmt.Sprintf("%q", m.login)
-		if m.login == "" {
-			what = "your profile"
-		}
 		blocks = append(blocks, lipgloss.NewStyle().
 			Width(min(width, maxErrorWidth)).
-			Render(fmt.Sprintf("couldn't load %s: %v", what, m.err)))
+			Render(fmt.Sprintf("couldn't load %q: %v", m.login, m.err)))
 	case u.Login != "":
 		blocks = append(blocks, m.header(width)...)
 		blocks = append(blocks, "")

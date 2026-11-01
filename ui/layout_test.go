@@ -101,8 +101,8 @@ func Test_FrameFitsScreen(t *testing.T) {
 			m, _ = send(m, res)
 
 			checkFrame(t, m.View(), width, height)
-			if !strings.HasPrefix(strings.Split(m.View(), "\n")[1], "> octocat") {
-				t.Fatalf("%dx%d: search bar scrolled off the top", width, height)
+			if trail, _ := topRows(m); trail != "octocat" {
+				t.Fatalf("%dx%d: hop trail scrolled off the top: %q", width, height, trail)
 			}
 
 			// the focused profile name, with its colored underline

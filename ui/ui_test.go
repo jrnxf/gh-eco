@@ -11,6 +11,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/jrnxf/gh-eco/api/github"
 	"github.com/jrnxf/gh-eco/models"
@@ -28,9 +29,6 @@ type fakeClient struct {
 	cache   map[string]string
 	// starErr fails every star and unstar.
 	starErr error
-	// viewer is the authenticated user's login; viewerErr fails the lookup.
-	viewer    string
-	viewerErr error
 	// people maps "followers login" or "following login" to every entry;
 	// pageSize splits it into pages, all of it in one by default.
 	people   map[string][]models.Person
@@ -57,11 +55,6 @@ func (f *fakeClient) User(_ context.Context, login string) (models.User, error) 
 		return u, nil
 	}
 	return models.User{}, github.ErrNotFound
-}
-
-func (f *fakeClient) Viewer(context.Context) (string, error) {
-	f.record("viewer")
-	return f.viewer, f.viewerErr
 }
 
 func (f *fakeClient) People(_ context.Context, login string, kind models.PeopleKind, after string) (models.PeoplePage, error) {
@@ -622,10 +615,23 @@ func Test_StarGhEcoKeepsAnExistingStarOnFailure(t *testing.T) {
 	}
 }
 
-// bottomRow is the frame's last row: the help bar, a notice or a spinner.
+// bottomRow is the frame's last row: the help bar or a notice.
 func bottomRow(m Model) string {
 	lines := strings.Split(m.View(), "\n")
 	return lines[len(lines)-1]
+}
+
+// topRows is the frame's first two rows, unstyled: the hop trail and the
+// search line.
+func topRows(m Model) (trail, search string) {
+	lines := strings.Split(ansi.Strip(m.View()), "\n")
+	return strings.TrimSpace(lines[0]), strings.TrimSpace(lines[1])
+}
+
+// spinnerShows reports whether label shows in the content area, the
+// spinner's place, rather than in the bottom row.
+func spinnerShows(m Model, label string) bool {
+	return strings.Contains(m.View(), label) && !strings.Contains(bottomRow(m), label)
 }
 
 func Test_SpinnerOnlyWhileTheNetworkIsBusy(t *testing.T) {
@@ -635,29 +641,29 @@ func Test_SpinnerOnlyWhileTheNetworkIsBusy(t *testing.T) {
 	}
 	m := newModel(t, client)
 	m, res := lookup(t, m, "octocat")
-	if !strings.Contains(bottomRow(m), "searching") {
-		t.Errorf("no spinner while searching: %q", bottomRow(m))
+	if !spinnerShows(m, "loading octocat…") {
+		t.Errorf("no spinner in place while searching:\n%s", m.View())
 	}
 	m, _ = send(m, res)
-	if strings.Contains(bottomRow(m), "searching") {
-		t.Errorf("spinner outlived the search: %q", bottomRow(m))
+	if strings.Contains(m.View(), "loading") {
+		t.Errorf("spinner outlived the search:\n%s", m.View())
 	}
 
 	m = focusRepo(t, m, "A")
 	m, msgs := send(m, keyRunes("r"))
-	if !strings.Contains(bottomRow(m), "loading readme") {
-		t.Errorf("no spinner while the readme loads: %q", bottomRow(m))
+	if !spinnerShows(m, "loading readme…") || !strings.Contains(m.View(), "alpha") {
+		t.Errorf("no spinner over the dimmed profile while the readme loads:\n%s", m.View())
 	}
 	m, _ = send(m, find[commands.GetReadmeResponse](t, msgs))
-	if strings.Contains(bottomRow(m), "loading") {
-		t.Errorf("spinner outlived the readme: %q", bottomRow(m))
+	if strings.Contains(m.View(), "loading") {
+		t.Errorf("spinner outlived the readme:\n%s", m.View())
 	}
 
 	// back and open it again: the cache answers, so no spinner at all
 	m, _ = send(m, keyRunes("r"))
 	m, msgs = send(m, keyRunes("r"))
-	if strings.Contains(bottomRow(m), "loading") {
-		t.Errorf("spinner shown for a cached readme: %q", bottomRow(m))
+	if strings.Contains(m.View(), "loading") {
+		t.Errorf("spinner shown for a cached readme:\n%s", m.View())
 	}
 	m, _ = send(m, find[commands.GetReadmeResponse](t, msgs))
 	if m.state.CurrentView != state.ReadmeView {
@@ -683,8 +689,8 @@ func Test_FailedReadmeIsQuietOnceTheUserMovesOn(t *testing.T) {
 
 	// the user moves on before the failure lands
 	m, _ = send(m, keyRunes("j"))
-	if strings.Contains(bottomRow(m), "loading") {
-		t.Errorf("spinner kept going after the user moved on: %q", bottomRow(m))
+	if strings.Contains(m.View(), "loading") {
+		t.Errorf("spinner kept going after the user moved on:\n%s", m.View())
 	}
 	m, msgs = send(m, failed)
 	if _, ok := firstOf[commands.SetMessage](msgs.all(t)); ok {

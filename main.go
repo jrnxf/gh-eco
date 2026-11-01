@@ -16,13 +16,13 @@ import (
 
 const usage = `usage: gh eco [<login>]
 
-Opens the profile of a GitHub user or organization, or your own profile
-when no login is given.`
+Opens the profile of a GitHub user or organization, or a search box when
+no login is given.`
 
 // errHelp asks for the usage text.
 var errHelp = errors.New("help requested")
 
-// parseArgs returns the login to open, or "" for the viewer's own profile.
+// parseArgs returns the login to open, or "" to start in the search box.
 func parseArgs(args []string) (string, error) {
 	if len(args) == 0 {
 		return "", nil

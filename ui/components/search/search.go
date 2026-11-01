@@ -66,8 +66,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// SetLogin shows login as the search, so the bar names the profile on
-// screen. It leaves a search being typed alone.
+// SetLogin shows login as the search, so a failed lookup shows what was
+// looked up. It leaves a search being typed alone.
 func (m *Model) SetLogin(login string) {
 	if m.state.Mode == state.NormalMode {
 		m.textInput.SetValue(login)
@@ -75,5 +75,5 @@ func (m *Model) SetLogin(login string) {
 }
 
 func (m Model) View() string {
-	return "\n" + m.textInput.View()
+	return m.textInput.View()
 }
