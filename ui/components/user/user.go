@@ -3,11 +3,11 @@ package user
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
 	"github.com/jrnxf/gh-eco/api/github"
 	"github.com/jrnxf/gh-eco/models"
 	"github.com/jrnxf/gh-eco/ui/commands"
@@ -15,6 +15,7 @@ import (
 	"github.com/jrnxf/gh-eco/ui/components/repo"
 	"github.com/jrnxf/gh-eco/ui/state"
 	"github.com/jrnxf/gh-eco/ui/styles"
+	"github.com/jrnxf/gh-eco/ui/text"
 )
 
 // maxErrorWidth wraps long error messages to a readable width.
@@ -69,7 +70,7 @@ func (m *Model) build() {
 	var blocks []string
 	switch {
 	case errors.Is(m.err, github.ErrNotFound):
-		blocks = append(blocks, ansi.Truncate(fmt.Sprintf("no user or organization named %q", m.login), width, "..."))
+		blocks = append(blocks, text.Ellipsize(fmt.Sprintf("no user or organization named %q", m.login), width))
 	case m.err != nil:
 		blocks = append(blocks, lipgloss.NewStyle().
 			Width(min(width, maxErrorWidth)).
@@ -79,7 +80,7 @@ func (m *Model) build() {
 		blocks = append(blocks, "")
 		if !u.IsOrganization {
 			blocks = append(blocks,
-				fmt.Sprintf("%v contributions", u.ActivityGraph.ContributionsCount),
+				text.Ellipsize(countOf(u.ActivityGraph.ContributionsCount)+" contributions in the last year", width),
 				graph.BuildGraphDisplay(fitWeeks(u.ActivityGraph.Weeks, width)),
 				"",
 			)
@@ -137,7 +138,7 @@ func (m Model) header(width int) []string {
 	if m.state.Focused().Kind == state.UserTarget {
 		nameStyle = styles.FocusedBold
 	}
-	blocks := []string{nameStyle.Render(ansi.Truncate(name, width, "...")), ""}
+	blocks := []string{nameStyle.Render(text.Ellipsize(name, width))}
 
 	if u.Bio != "" {
 		bio := lipgloss.NewStyle().
@@ -145,41 +146,47 @@ func (m Model) header(width int) []string {
 			Align(lipgloss.Center).
 			Width(min(width, lipgloss.Width(u.Bio))).
 			Render(u.Bio)
-		blocks = append(blocks, bio, "")
+		blocks = append(blocks, bio)
 	}
 
+	italic := lipgloss.NewStyle().Italic(true)
+	var stats []string
 	if !u.IsOrganization {
-		follow := fmt.Sprintf("%v followers", u.FollowersCount)
+		followers := countOf(u.FollowersCount) + " followers"
 		if u.ViewerIsFollowing {
-			follow += lipgloss.NewStyle().Italic(true).Render(" (you follow)")
+			followers += italic.Render(" (you follow)")
 		}
-		follow += fmt.Sprintf(" / %v following", u.FollowingCount)
+		following := countOf(u.FollowingCount) + " following"
 		if u.IsFollowingViewer {
-			follow += lipgloss.NewStyle().Italic(true).Render(" (follows you)")
+			following += italic.Render(" (follows you)")
 		}
-		blocks = append(blocks, ansi.Truncate(follow, width, "..."))
+		stats = append(stats, followers, following)
 	}
-
-	var links []string
 	if u.Location != "" {
-		links = append(links, u.Location)
+		stats = append(stats, u.Location)
 	}
 	if u.WebsiteUrl != "" {
-		links = append(links, u.WebsiteUrl)
+		stats = append(stats, u.WebsiteUrl)
 	}
 	if u.TwitterUsername != "" {
-		links = append(links, "@"+u.TwitterUsername)
+		stats = append(stats, "@"+u.TwitterUsername)
 	}
-	if len(links) > 0 {
-		if !u.IsOrganization {
-			blocks = append(blocks, "")
-		}
-		blocks = append(blocks, ansi.Truncate(strings.Join(links, "  /  "), width, "..."))
-	}
-	if blocks[len(blocks)-1] == "" {
-		blocks = blocks[:len(blocks)-1]
+	if len(stats) > 0 {
+		blocks = append(blocks, text.Ellipsize(strings.Join(stats, " · "), width))
 	}
 	return blocks
+}
+
+// countOf formats n with thousands separators, as GitHub does.
+func countOf(n int) string {
+	s := strconv.Itoa(n)
+	if n < 0 {
+		return "-" + countOf(-n)
+	}
+	for i := len(s) - 3; i > 0; i -= 3 {
+		s = s[:i] + "," + s[i:]
+	}
+	return s
 }
 
 // snapToRow moves an offset that falls inside the card grid down to the

@@ -5,9 +5,9 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
 	"github.com/jrnxf/gh-eco/models"
 	"github.com/jrnxf/gh-eco/ui/styles"
+	"github.com/jrnxf/gh-eco/ui/text"
 )
 
 // maxDescription is how many characters of a description a card shows
@@ -67,16 +67,16 @@ func Grid(repos []models.Repo, focused, width int) (grid string, rowHeight, top,
 
 // card renders one repo in a frame whose text area is width cells wide.
 func card(r models.Repo, width int, focused bool) string {
-	name := styles.Bold
+	name, frame := styles.Bold, styles.Frame
 	if focused {
-		name = styles.FocusedBold
+		name, frame = styles.FocusedBold, styles.FocusedFrame
 	}
 	lines := []string{
-		name.Render(ansi.Truncate(r.Name, width, "...")),
-		ansi.Truncate(description(r), width, "..."),
-		ansi.Truncate(stats(r), width, "..."),
+		name.Render(text.Ellipsize(r.Name, width)),
+		text.Ellipsize(description(r), width),
+		text.Ellipsize(stats(r), width),
 	}
-	return styles.Frame.Width(width + 2).Render(strings.Join(lines, "\n"))
+	return frame.Width(width + 2).Render(strings.Join(lines, "\n"))
 }
 
 func description(r models.Repo) string {

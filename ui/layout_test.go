@@ -86,6 +86,9 @@ func Test_FrameFitsScreen(t *testing.T) {
 		if width%10 == 0 {
 			heights = append(heights, 15)
 		}
+		if width == 60 {
+			heights = append(heights, 20)
+		}
 		for _, height := range heights {
 			m, _ := send(New(client), tea.WindowSizeMsg{Width: width, Height: height})
 			m, res := lookup(t, m, "octocat")
