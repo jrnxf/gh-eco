@@ -76,7 +76,7 @@ func Test_LaunchShowsTheLoginLoadingFromTheFirstFrame(t *testing.T) {
 	if trail, search := topRows(m); trail != "octocat" || search != "" {
 		t.Errorf("first frame top rows are %q and %q, want the trail and no search line", trail, search)
 	}
-	if !spinnerShows(m, "loading octocat…") {
+	if !spinnerOnTop(m) {
 		t.Errorf("first frame does not show octocat loading:\n%s", m.View())
 	}
 }
@@ -141,8 +141,8 @@ func Test_HopThroughFollowersAndBack(t *testing.T) {
 	if trail, search := topRows(m); trail != "alice › bob" || search != "" {
 		t.Errorf("while bob loads the top rows are %q and %q", trail, search)
 	}
-	if view := m.View(); !strings.Contains(view, "loading bob…") || !strings.Contains(view, "carol") || strings.Contains(bottomRow(m), "loading") {
-		t.Errorf("bob's spinner is not over the dimmed list:\n%s", view)
+	if view := m.View(); !spinnerOnTop(m) || !strings.Contains(view, "carol") {
+		t.Errorf("bob's spinner is not after his name over the dimmed list:\n%s", view)
 	}
 	m, _ = send(m, find[commands.GetUserResponse](t, msgs))
 	if m.state.User.Login != "bob" || m.state.CurrentView != state.UserView {
@@ -265,7 +265,7 @@ func Test_BackDropsAPendingReadme(t *testing.T) {
 	}
 	m, msgs = send(m, keyRunes("r"))
 	readme := find[commands.GetReadmeResponse](t, msgs)
-	if !spinnerShows(m, "loading readme…") {
+	if !spinnerOnTop(m) {
 		t.Fatalf("no readme spinner after r:\n%s", m.View())
 	}
 
@@ -509,10 +509,10 @@ func Test_EscLeavesASearchWithNothingLost(t *testing.T) {
 	if trail, search := topRows(m); trail != "alice › bob" || !strings.Contains(search, "car") {
 		t.Errorf("while typing the top rows are %q and %q", trail, search)
 	}
-	if quits(m, esc) {
+	m, in := send(m, esc)
+	if _, quit := firstOf[tea.QuitMsg](in.all(t)); quit {
 		t.Fatal("esc in a search quit")
 	}
-	m, _ = send(m, esc)
 	if m.state.Mode != state.NormalMode || m.state.User.Login != "bob" || m.state.CurrentView != state.UserView {
 		t.Errorf("esc left mode %v on %q in view %v", m.state.Mode, m.state.User.Login, m.state.CurrentView)
 	}
@@ -528,8 +528,15 @@ func Test_EscLeavesASearchWithNothingLost(t *testing.T) {
 	if m.state.User.Login != "alice" || m.state.CurrentView != state.PeopleView {
 		t.Errorf("backspace after esc shows %q in view %v", m.state.User.Login, m.state.CurrentView)
 	}
+	// esc now closes layers like backspace, and quits at the top level
+	if quits(m, esc) {
+		t.Error("esc quit with a page to go back to")
+	}
+	if m.state.User.Login != "alice" || m.state.CurrentView != state.UserView {
+		t.Errorf("esc shows %q in view %v, want alice's profile", m.state.User.Login, m.state.CurrentView)
+	}
 	if !quits(m, esc) {
-		t.Error("esc outside a search does not quit")
+		t.Error("esc at the top level does not quit")
 	}
 }
 
@@ -602,5 +609,415 @@ func Test_BackspaceCancelsASearchKeepingTheTrail(t *testing.T) {
 	m, _ = send(m, carol)
 	if trail, _ := topRows(m); m.state.User.Login != "bob" || trail != "alice › bob" {
 		t.Errorf("a cancelled search shows %q with trail %q", m.state.User.Login, trail)
+	}
+}
+
+// contentRows is the frame under its top two rows and above the help bar.
+func contentRows(m Model) []string {
+	lines := strings.Split(ansi.Strip(m.View()), "\n")
+	return lines[2 : len(lines)-1]
+}
+
+func Test_SearchNeverMovesTheContent(t *testing.T) {
+	client := &fakeClient{
+		users:  map[string]models.User{"alice": {Login: "alice", FollowersCount: 1}, "bob": {Login: "bob"}},
+		people: map[string][]models.Person{"followers alice": {{Login: "bob"}}},
+	}
+	m := launch(t, client, "alice", 80, 24)
+	before := contentRows(m)
+	frame := len(strings.Split(m.View(), "\n"))
+
+	m, _ = send(m, keyRunes("/"))
+	if got := contentRows(m); strings.Join(got, "\n") != strings.Join(before, "\n") || len(strings.Split(m.View(), "\n")) != frame {
+		t.Errorf("/ moved the content:\n%s", m.View())
+	}
+	m, _ = send(m, esc)
+	if got := contentRows(m); strings.Join(got, "\n") != strings.Join(before, "\n") {
+		t.Errorf("esc moved the content:\n%s", m.View())
+	}
+
+	// the same on the list, and with the search already submitted
+	m = openList(t, m, state.FollowersTarget)
+	listRows := rowOf(m, "bob")
+	m, _ = send(m, keyRunes("/"))
+	if got := rowOf(m, "bob"); got != listRows {
+		t.Errorf("/ moved the list from row %d to %d", listRows, got)
+	}
+}
+
+func Test_ListFirstPageSpinnerIsOnTheTopRow(t *testing.T) {
+	client := &fakeClient{
+		users:  map[string]models.User{"alice": {Login: "alice", FollowersCount: 1}},
+		people: map[string][]models.Person{"followers alice": {{Login: "bob"}}},
+	}
+	m := launch(t, client, "alice", 80, 24)
+	for m.state.Focused().Kind != state.FollowersTarget {
+		m, _ = send(m, keyRunes("j"))
+	}
+	m, _ = send(m, enter)
+	if !spinnerOnTop(m) {
+		t.Errorf("no spinner on the top row while the first page loads:\n%s", m.View())
+	}
+}
+
+func Test_TypedSearchKeepsTheTrailOnOneNarrowLine(t *testing.T) {
+	client := &fakeClient{users: map[string]models.User{
+		"alice": {Login: "alice", FollowersCount: 1},
+	}}
+	m := launch(t, client, "alice", 80, 24)
+	// a long hop trail
+	for _, l := range []string{"bob-the-builder", "carol-of-the-bells", "dave-from-accounting", "erin-brockovich"} {
+		m.state.History = append(m.state.History, state.Page{User: models.User{Login: l}})
+	}
+	m, _ = send(m, keyRunes("/"))
+	m, _ = send(m, keyRunes("some-long-search-term"))
+	checkFrame(t, m.View(), 80, 24)
+	row := topRow(m)
+	if !strings.HasPrefix(row, "> some-long-search-term") || !strings.Contains(row, "…") || !strings.HasSuffix(row, "alice") {
+		t.Errorf("top row is not the search with a left-truncated trail: %q", row)
+	}
+}
+
+func Test_LongSearchStaysOnTheTopLine(t *testing.T) {
+	client := &fakeClient{users: map[string]models.User{"alice": {Login: "alice"}}}
+	m := launch(t, client, "alice", 40, 24)
+	before := contentRows(m)
+
+	m, _ = send(m, keyRunes("/"))
+	m, _ = send(m, keyRunes("a-very-long-login-name-of-39-characters"))
+	checkFrame(t, m.View(), 40, 24)
+	if got := contentRows(m); strings.Join(got, "\n") != strings.Join(before, "\n") {
+		t.Errorf("a long search moved the content:\n%s", m.View())
+	}
+	if row := topRow(m); !strings.HasSuffix(row, "characters") {
+		t.Errorf("a long search does not keep its end in sight: %q", row)
+	}
+
+	// with the cursor moved back into the search
+	for range 30 {
+		m, _ = send(m, tea.KeyMsg{Type: tea.KeyLeft})
+	}
+	checkFrame(t, m.View(), 40, 24)
+	if got := contentRows(m); strings.Join(got, "\n") != strings.Join(before, "\n") {
+		t.Errorf("moving the cursor in a long search moved the content:\n%s", m.View())
+	}
+}
+
+// profileWithRepo is a profile whose repo has a readme.
+func profileWithRepo(login string) models.User {
+	return models.User{
+		Login: login, Url: "https://github.com/" + login, FollowersCount: 1,
+		Repos: []models.Repo{{Id: login + "-repo", Name: "alpha", Owner: struct{ Login string }{login}}},
+	}
+}
+
+func Test_BackspaceInAReadmeClosesOnlyTheReadme(t *testing.T) {
+	client := &fakeClient{
+		users:   map[string]models.User{"alice": profileWithRepo("alice"), "bob": profileWithRepo("bob")},
+		readmes: map[string]string{"bob/alpha": "# bob readme"},
+		people:  map[string][]models.Person{"followers alice": {{Login: "bob"}}},
+	}
+	m := launch(t, client, "alice", 80, 24)
+	m = openList(t, m, state.FollowersTarget)
+	m, msgs := send(m, enter)
+	m, _ = send(m, find[commands.GetUserResponse](t, msgs))
+	m = focusRepo(t, m, "bob-repo")
+	m, msgs = send(m, keyRunes("r"))
+	m, _ = send(m, find[commands.GetReadmeResponse](t, msgs))
+	if m.state.CurrentView != state.ReadmeView {
+		t.Fatalf("readme did not open")
+	}
+	history := len(m.state.History)
+
+	m, _ = send(m, backspace)
+	if m.state.CurrentView != state.UserView || m.state.User.Login != "bob" || len(m.state.History) != history {
+		t.Errorf("backspace in a readme left view %v on %q with %d pages of history, want bob's profile with %d",
+			m.state.CurrentView, m.state.User.Login, len(m.state.History), history)
+	}
+	if trail, _ := topRows(m); trail != "alice › bob" {
+		t.Errorf("trail after closing the readme is %q", trail)
+	}
+	// the next backspace is the page back
+	m, _ = send(m, backspace)
+	if m.state.CurrentView != state.PeopleView {
+		t.Errorf("second backspace shows view %v, want the list", m.state.CurrentView)
+	}
+}
+
+var qKey = keyRunes("q")
+
+// press delivers msg and reports whether it quit the program. Unlike
+// quits, it keeps the model the key produced.
+func press(m Model, msg tea.Msg) (Model, bool) {
+	next, cmd := m.Update(msg)
+	if cmd == nil {
+		return next.(Model), false
+	}
+	_, quit := cmd().(tea.QuitMsg)
+	return next.(Model), quit
+}
+
+// hopFixture is alice, who has a repo and one follower, bob.
+func hopFixture() *fakeClient {
+	return &fakeClient{
+		users:   map[string]models.User{"alice": profileWithRepo("alice"), "bob": profileWithRepo("bob")},
+		readmes: map[string]string{"alice/alpha": "# alice readme", "bob/alpha": "# bob readme"},
+		people:  map[string][]models.Person{"followers alice": {{Login: "bob"}}},
+	}
+}
+
+func Test_LatestKeyWinsOverAPendingHop(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		key  tea.KeyMsg
+	}{{"j", keyRunes("j")}, {"k", keyRunes("k")}, {"enter", enter}} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := launch(t, hopFixture(), "alice", 80, 24)
+			m, bob := lookup(t, m, "bob")
+			// the search put focus back on the profile; park it on the
+			// followers count without a key press
+			for m.state.Focused().Kind != state.FollowersTarget {
+				m.state.FocusNext()
+			}
+
+			m, in := send(m, tc.key)
+			if m.pendingLogin != "" || m.loading.Visible() && tc.key.Type != tea.KeyEnter {
+				t.Errorf("%s left the hop pending: %q", tc.name, m.pendingLogin)
+			}
+			if trail, _ := topRows(m); !strings.HasPrefix(trail, "alice") || strings.Contains(trail, "bob") {
+				t.Errorf("trail after %s is %q, want alice alone", tc.name, trail)
+			}
+			if tc.key.Type == tea.KeyEnter {
+				// the key acted at once: alice's followers opened
+				if m.state.CurrentView != state.PeopleView {
+					t.Errorf("enter did not open the list: view %v", m.state.CurrentView)
+				}
+				m, _ = send(m, find[commands.GetPeopleResponse](t, in))
+			}
+			// bob's late answer changes nothing
+			before := m.state.CurrentView
+			m, _ = send(m, bob)
+			if m.state.User.Login != "alice" || m.state.CurrentView != before || len(m.state.History) > 1 {
+				t.Errorf("a dropped hop landed: %q in view %v", m.state.User.Login, m.state.CurrentView)
+			}
+		})
+	}
+}
+
+func Test_EscClosesTheTopLayer(t *testing.T) {
+	// readme -> its profile, history untouched
+	m := launch(t, hopFixture(), "alice", 80, 24)
+	m = focusRepo(t, m, "alice-repo")
+	m, msgs := send(m, keyRunes("r"))
+	m, _ = send(m, find[commands.GetReadmeResponse](t, msgs))
+	m, quit := press(m, esc)
+	if quit || m.state.CurrentView != state.UserView || m.state.User.Login != "alice" {
+		t.Errorf("esc in a readme: view %v on %q", m.state.CurrentView, m.state.User.Login)
+	}
+
+	// pending readme -> dropped, profile stays
+	m, _ = send(m, keyRunes("r"))
+	if !m.readmePending {
+		t.Fatal("readme not pending")
+	}
+	if m, quit = press(m, esc); quit || m.readmePending || m.loading.Visible() {
+		t.Errorf("esc did not drop the pending readme")
+	}
+
+	// list -> profile
+	m = openList(t, m, state.FollowersTarget)
+	if m, quit = press(m, esc); quit || m.state.CurrentView != state.UserView || len(m.state.History) != 0 {
+		t.Errorf("esc in a list: view %v, %d pages of history", m.state.CurrentView, len(m.state.History))
+	}
+
+	// pending hop -> dropped; the hopped profile -> the page it came from
+	m, res := lookup(t, m, "bob")
+	if m, quit = press(m, esc); quit || m.pendingLogin != "" || m.state.User.Login != "alice" {
+		t.Errorf("esc did not drop the pending hop")
+	}
+	m, _ = send(m, res)
+	if m.state.User.Login != "alice" {
+		t.Errorf("a dropped hop landed")
+	}
+	m = openList(t, m, state.FollowersTarget)
+	m, msgs = send(m, enter)
+	m, _ = send(m, find[commands.GetUserResponse](t, msgs))
+	if m, quit = press(m, esc); quit || m.state.CurrentView != state.PeopleView {
+		t.Errorf("esc on a hopped profile shows view %v", m.state.CurrentView)
+	}
+
+	// the top level quits
+	m, _ = press(m, esc)
+	if _, quit = press(m, esc); !quit {
+		t.Errorf("esc at the top level does not quit (user %q, history %d)", m.state.User.Login, len(m.state.History))
+	}
+}
+
+func Test_QAlwaysQuitsExceptWhileTyping(t *testing.T) {
+	m := launch(t, hopFixture(), "alice", 80, 24)
+	if _, quit := press(m, qKey); !quit {
+		t.Error("q on a profile does not quit")
+	}
+	m = openList(t, m, state.FollowersTarget)
+	if _, quit := press(m, qKey); !quit {
+		t.Error("q in a list does not quit")
+	}
+	m, _ = send(m, esc)
+	m = focusRepo(t, m, "alice-repo")
+	m, msgs := send(m, keyRunes("r"))
+	m, _ = send(m, find[commands.GetReadmeResponse](t, msgs))
+	if _, quit := press(m, qKey); !quit {
+		t.Error("q in a readme does not quit")
+	}
+	m, _ = send(m, esc)
+	m, _ = lookup(t, m, "bob")
+	if _, quit := press(m, qKey); !quit {
+		t.Error("q over a pending hop does not quit")
+	}
+
+	// in the search box q is a letter
+	m, _ = send(m, keyRunes("/"))
+	m, quit := press(m, qKey)
+	if quit {
+		t.Fatal("q quit from the search box")
+	}
+	if _, search := topRows(m); !strings.Contains(search, "q") {
+		t.Errorf("q was not typed: %q", search)
+	}
+}
+
+func Test_SlashOpensSearchInsideAReadme(t *testing.T) {
+	m := launch(t, hopFixture(), "alice", 80, 24)
+	m = focusRepo(t, m, "alice-repo")
+	m, msgs := send(m, keyRunes("r"))
+	m, _ = send(m, find[commands.GetReadmeResponse](t, msgs))
+
+	m, _ = send(m, keyRunes("/"))
+	if m.state.Mode != state.InsertMode || m.state.CurrentView != state.UserView {
+		t.Fatalf("/ in a readme left mode %v in view %v", m.state.Mode, m.state.CurrentView)
+	}
+	m, _ = send(m, keyRunes("bo"))
+	if _, search := topRows(m); !strings.Contains(search, "bo") {
+		t.Errorf("typing in the search after / in a readme: %q", search)
+	}
+	checkFrame(t, m.View(), 80, 24)
+	// esc leaves the search on the profile
+	m, _ = send(m, esc)
+	if m.state.Mode != state.NormalMode || m.state.User.Login != "alice" {
+		t.Errorf("esc after / in a readme: mode %v on %q", m.state.Mode, m.state.User.Login)
+	}
+}
+
+func Test_UnboundKeysKeepAPendingLoad(t *testing.T) {
+	unbound := []tea.KeyMsg{keyRunes("x"), {Type: tea.KeyTab}, {Type: tea.KeyShiftTab}}
+
+	// a pending hop
+	m := launch(t, hopFixture(), "alice", 80, 24)
+	m, bob := lookup(t, m, "bob")
+	for _, k := range unbound {
+		m, _ = send(m, k)
+	}
+	if m.pendingLogin != "bob" || !spinnerOnTop(m) {
+		t.Fatalf("an unbound key dropped the pending hop:\n%s", m.View())
+	}
+	m, _ = send(m, bob)
+	if m.state.User.Login != "bob" {
+		t.Errorf("the kept hop did not land: %q", m.state.User.Login)
+	}
+
+	// a pending readme
+	m = focusRepo(t, m, "bob-repo")
+	m, msgs := send(m, keyRunes("r"))
+	readme := find[commands.GetReadmeResponse](t, msgs)
+	for _, k := range unbound {
+		m, _ = send(m, k)
+	}
+	if !m.readmePending || !spinnerOnTop(m) {
+		t.Fatalf("an unbound key dropped the pending readme:\n%s", m.View())
+	}
+	m, _ = send(m, readme)
+	if m.state.CurrentView != state.ReadmeView {
+		t.Errorf("the kept readme did not open: view %v", m.state.CurrentView)
+	}
+}
+
+func Test_InertKeysKeepAPendingHopFromAList(t *testing.T) {
+	client := hopFixture()
+	client.people["followers alice"] = []models.Person{{Login: "bob"}, {Login: "carol"}}
+	m := launch(t, client, "alice", 80, 24)
+	m = openList(t, m, state.FollowersTarget)
+	m, msgs := send(m, enter)
+	bob := find[commands.GetUserResponse](t, msgs)
+
+	// a list has no readme or repo, and k is already at the top
+	for _, k := range []tea.KeyMsg{keyRunes("x"), keyRunes("r"), keyRunes("s"), keyRunes("k")} {
+		m, _ = send(m, k)
+		if m.pendingLogin != "bob" || !spinnerOnTop(m) {
+			t.Fatalf("%q did nothing yet dropped the pending hop:\n%s", k.String(), m.View())
+		}
+	}
+
+	// j moves the selection, so it wins over the hop
+	m, _ = send(m, keyRunes("j"))
+	if m.pendingLogin != "" || m.loading.Visible() {
+		t.Errorf("j left the hop pending: %q", m.pendingLogin)
+	}
+	if p := m.state.People.SelectedPerson(); p == nil || p.Login != "carol" {
+		t.Errorf("j did not move the selection: %+v", p)
+	}
+	m, _ = send(m, bob)
+	if m.state.User.Login != "alice" || m.state.CurrentView != state.PeopleView {
+		t.Errorf("a dropped hop landed: %q in view %v", m.state.User.Login, m.state.CurrentView)
+	}
+}
+
+func Test_HelpOffersBackWheneverBackWorks(t *testing.T) {
+	// launched with a login: the first lookup can be dropped
+	client := hopFixture()
+	m, _ := send(New(client, "alice"), tea.WindowSizeMsg{Width: 200, Height: 24})
+	if !strings.Contains(ansi.Strip(bottomRow(m)), "back") {
+		t.Errorf("help while the first profile loads has no back: %q", ansi.Strip(bottomRow(m)))
+	}
+
+	// a first profile with no history and a readme pending
+	m = launch(t, client, "alice", 200, 24)
+	if strings.Contains(ansi.Strip(bottomRow(m)), "back") {
+		t.Errorf("help offers back with nothing to go back to: %q", ansi.Strip(bottomRow(m)))
+	}
+	m = focusRepo(t, m, "alice-repo")
+	m, msgs := send(m, keyRunes("r"))
+	if !strings.Contains(ansi.Strip(bottomRow(m)), "back") {
+		t.Errorf("help while a readme loads has no back: %q", ansi.Strip(bottomRow(m)))
+	}
+
+	// / works in a readme, and the help says so
+	m, _ = send(m, find[commands.GetReadmeResponse](t, msgs))
+	if m.state.CurrentView != state.ReadmeView {
+		t.Fatalf("readme did not open")
+	}
+	if !strings.Contains(ansi.Strip(bottomRow(m)), "/ focus input") {
+		t.Errorf("readme help does not offer /: %q", ansi.Strip(bottomRow(m)))
+	}
+}
+
+func Test_SlashDropsAPendingReadmeButKeepsAHop(t *testing.T) {
+	m := launch(t, hopFixture(), "alice", 80, 24)
+	m = focusRepo(t, m, "alice-repo")
+	m, msgs := send(m, keyRunes("r"))
+	readme := find[commands.GetReadmeResponse](t, msgs)
+	m, _ = send(m, keyRunes("/"))
+	if m.readmePending || m.loading.Visible() {
+		t.Errorf("/ left the readme pending")
+	}
+	m, _ = send(m, esc)
+	m, _ = send(m, readme)
+	if m.state.CurrentView != state.UserView {
+		t.Errorf("a readme dropped by / opened after esc")
+	}
+
+	m, _ = lookup(t, m, "bob")
+	m, _ = send(m, keyRunes("/"))
+	if m.pendingLogin != "bob" {
+		t.Errorf("/ dropped the pending hop")
 	}
 }

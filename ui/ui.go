@@ -139,16 +139,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// esc in a search that can be cancelled leaves the search instead
 		cancel := s.Mode == state.InsertMode && s.LookedUp && key.Matches(msg, m.keys.Cancel)
-		if key.Matches(msg, m.keys.Quit) && !cancel {
+		// q is a letter in the search box
+		typingQ := s.Mode == state.InsertMode && msg.String() == "q"
+		// esc closes the layer on top, like backspace, and quits only
+		// from the top level
+		escCloses := s.Mode == state.NormalMode && key.Matches(msg, m.keys.Cancel) && m.canGoBack()
+		if key.Matches(msg, m.keys.Quit) && !cancel && !typingQ && !escCloses {
 			return m, tea.Quit
 		}
 		if s.Mode == state.NormalMode {
-			if m.readmePending && !key.Matches(msg, m.keys.Back) {
-				// any other key means the user moved on: drop the pending
-				// readme, success or failure
+			if escCloses {
+				cmds = append(cmds, m.back())
+				break
+			}
+			readmeReq, userReq := m.readmeReq, m.userReq
+			cmd, acted := m.handleNormalKey(msg)
+			cmds = append(cmds, cmd)
+			// the latest key wins: one that acted on the dimmed page drops
+			// the load it did not replace itself; a key that did nothing
+			// keeps it. Opening the search leaves the readme behind but
+			// keeps a hop, so esc loses nothing
+			if (acted || key.Matches(msg, m.keys.FocusInput)) && m.readmePending && m.readmeReq == readmeReq {
 				m.cancelReadme()
 			}
-			cmds = append(cmds, m.handleNormalKey(msg))
+			if acted && m.pendingLogin != "" && m.userReq == userReq {
+				m.cancelHop()
+			}
 		}
 
 	case commands.SearchSubmitted:
@@ -253,6 +269,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds = append(cmds, cmd)
 	m.message, cmd = m.message.Update(msg)
 	cmds = append(cmds, cmd)
+	s.Backable = m.canGoBack()
 	// size the content area after every view change above, before the
 	// components that fill it
 	m.layout()
@@ -289,15 +306,26 @@ func (m *Model) cancelPeople() {
 	m.loading.Stop(loadPeople)
 }
 
+// cancelHop drops the pending profile lookup, keeping the page on screen.
+func (m *Model) cancelHop() {
+	m.userReq++
+	m.pendingLogin = ""
+	m.restart = false
+	m.loading.Stop(loadUser)
+}
+
+// canGoBack reports whether back has anything to undo: a load to drop, a
+// readme to close, or a page to return to.
+func (m Model) canGoBack() bool {
+	return m.pendingLogin != "" || m.readmePending || m.state.CurrentView == state.ReadmeView || len(m.state.History) > 0
+}
+
 // back cancels a pending hop or readme, keeping the page on screen, or
 // else returns to the previous page, dropping any request still out for
 // the one being left.
 func (m *Model) back() tea.Cmd {
 	if m.pendingLogin != "" {
-		m.userReq++
-		m.pendingLogin = ""
-		m.restart = false
-		m.loading.Stop(loadUser)
+		m.cancelHop()
 		return nil
 	}
 	if m.readmePending {
@@ -305,6 +333,11 @@ func (m *Model) back() tea.Cmd {
 		return nil
 	}
 	s := m.state
+	if s.CurrentView == state.ReadmeView {
+		// the readme is a layer over its profile: backspace closes only it
+		s.CurrentView = state.UserView
+		return nil
+	}
 	if !s.Pop() {
 		return nil
 	}
@@ -352,30 +385,33 @@ func (m *Model) morePeople() tea.Cmd {
 	return tea.Batch(fetch, m.loading.Start(loadPeople))
 }
 
-func (m *Model) handleNormalKey(msg tea.KeyMsg) tea.Cmd {
+// handleNormalKey acts on a key pressed on the page and reports whether
+// it did anything there. Starring gh-eco and focusing the search box do
+// not count: neither acts on the page.
+func (m *Model) handleNormalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	s := m.state
 	target := s.Focused()
 
 	switch {
 	case key.Matches(msg, m.keys.Back):
-		return m.back()
+		return m.back(), true
 
 	case key.Matches(msg, m.keys.OpenGithub):
 		if s.CurrentView == state.PeopleView {
 			if p := s.People.SelectedPerson(); p != nil {
-				return openURL(p.Url)
+				return openURL(p.Url), true
 			}
-			return nil
+			return nil, false
 		}
 		switch target.Kind {
 		case state.UserTarget:
-			return openURL(s.User.Url)
+			return openURL(s.User.Url), true
 		case state.FollowersTarget:
-			return openURL(s.User.Url + "?tab=followers")
+			return openURL(s.User.Url + "?tab=followers"), true
 		case state.FollowingTarget:
-			return openURL(s.User.Url + "?tab=following")
+			return openURL(s.User.Url + "?tab=following"), true
 		case state.RepoTarget:
-			return openURL(s.FocusedRepo().Url)
+			return openURL(s.FocusedRepo().Url), true
 		}
 
 	case key.Matches(msg, m.keys.StarRepo):
@@ -384,7 +420,7 @@ func (m *Model) handleNormalKey(msg tea.KeyMsg) tea.Cmd {
 			unstar := r.ViewerHasStarred
 			setStarred(r, !unstar)
 			m.starPending[r.Id] = true
-			return star(m.client, r.Id, unstar, unstar)
+			return star(m.client, r.Id, unstar, unstar), true
 		}
 
 	case key.Matches(msg, m.keys.StarGhEco):
@@ -402,40 +438,45 @@ func (m *Model) handleNormalKey(msg tea.KeyMsg) tea.Cmd {
 		return tea.Batch(
 			message.Show("tysm 🥹", 2),
 			star(m.client, github.GhEcoRepoID, false, prev),
-		)
+		), false
 
 	case key.Matches(msg, m.keys.ToggleReadme):
 		switch s.CurrentView {
 		case state.UserView:
 			switch target.Kind {
 			case state.UserTarget:
-				return m.openReadme(profileReadme(s.User))
+				return m.openReadme(profileReadme(s.User)), true
 			case state.RepoTarget:
 				r := s.FocusedRepo()
-				return m.openReadme(readmeRef{owner: r.Owner.Login, name: r.Name})
+				return m.openReadme(readmeRef{owner: r.Owner.Login, name: r.Name}), true
 			}
 		case state.ReadmeView:
 			s.CurrentView = state.UserView
+			return nil, true
 		}
 	}
 
 	switch s.CurrentView {
 	case state.UserView:
+		focus := s.Focus
 		switch {
 		case key.Matches(msg, m.keys.FocusNext):
 			s.FocusNext()
+			return nil, s.Focus != focus
 		case key.Matches(msg, m.keys.FocusPrev):
 			s.FocusPrev()
+			return nil, s.Focus != focus
 		case key.Matches(msg, m.keys.FocusInput):
 			s.Focus = 0
 		case key.Matches(msg, m.keys.OpenList) && target.Kind == state.FollowersTarget:
-			return m.openPeople(models.Followers)
+			return m.openPeople(models.Followers), true
 		case key.Matches(msg, m.keys.OpenList) && target.Kind == state.FollowingTarget:
-			return m.openPeople(models.Following)
+			return m.openPeople(models.Following), true
 		}
 
 	case state.PeopleView:
 		half := max(1, s.Layout.ContentHeight/2)
+		selected := s.People.Selected
 		switch {
 		case key.Matches(msg, m.keys.FocusNext):
 			s.People.Move(1)
@@ -447,12 +488,12 @@ func (m *Model) handleNormalKey(msg tea.KeyMsg) tea.Cmd {
 			s.People.Move(-half)
 		case key.Matches(msg, m.keys.OpenProfile):
 			if p := s.People.SelectedPerson(); p != nil {
-				return m.lookup(p.Login)
+				return m.lookup(p.Login), true
 			}
 		}
-		return m.morePeople()
+		return m.morePeople(), s.People.Selected != selected
 	}
-	return nil
+	return nil, false
 }
 
 // layout sizes the content area between the top rows and the help bar.
@@ -482,43 +523,69 @@ func (m Model) View() string {
 	var content string
 	switch {
 	case s.CurrentView == state.PeopleView:
+		// a first page loading shows its spinner on the top row; only a
+		// next page, appended to a list already on screen, has one here
 		spinner := ""
-		if m.loading.Pending(loadPeople) {
+		if m.loading.Pending(loadPeople) && len(s.People.List) > 0 {
 			spinner = m.loading.View("loading " + people.Noun(s.People.Kind) + "…")
 		}
 		content = m.people.View(spinner)
 	default:
 		content = m.user.View()
 	}
-	// a slow request that replaces the screen shows over it
-	switch {
-	case m.loading.Pending(loadUser):
-		content = m.loadingOver(content, "loading "+m.pendingLogin+"…")
-	case m.loading.Pending(loadReadme):
-		content = m.loadingOver(content, "loading readme…")
+	// a slow request that replaces the screen dims it; its spinner sits
+	// on the top row
+	if m.loading.Pending(loadUser) || m.loading.Pending(loadReadme) {
+		content = m.dim(content)
 	}
 	return strings.Join([]string{m.top(), content, bottom}, "\n")
 }
 
-// top is the hop trail over the search box, which shows only while a
-// search is typed or nothing else is on screen.
+// top is the two rows over the content, always: the hop trail with the
+// spinner of a slow request after it, or while a search is typed (or
+// nothing else is on screen) the search box with the trail dimmed on the
+// right. The second row is empty. Opening or leaving the search never
+// adds or removes a row, so the content stays where it is.
 func (m Model) top() string {
 	s := m.state
-	search := ""
+	width := max(0, s.Layout.ContentWidth-state.RightSlack)
 	if s.Mode == state.InsertMode || (s.User.Login == "" && m.pendingLogin == "") {
-		search = m.search.View()
+		return m.searchRow(width) + "\n"
 	}
-	trail := m.trail()
-	if trail != "" && search != "" {
-		// an empty row keeps the trail apart from the search line
-		return trail + "\n\n" + search
+	spinner := ""
+	if m.topLoading() {
+		spinner = " " + m.loading.Spinner()
 	}
-	return trail + "\n" + search
+	return m.trail(width-lipgloss.Width(spinner)) + spinner + "\n"
+}
+
+// topLoading reports whether a request that replaces or fills the screen
+// is out, which the top row shows with a spinner.
+func (m Model) topLoading() bool {
+	l := m.loading
+	return l.Pending(loadUser) || l.Pending(loadReadme) ||
+		(l.Pending(loadPeople) && len(m.state.People.List) == 0)
+}
+
+// searchRow is the search box with the trail dimmed on its right. A trail
+// that does not fit loses its oldest end, marked with "…", and goes
+// altogether when not even that fits.
+func (m Model) searchRow(width int) string {
+	box := m.search.View(width)
+	trail := ansi.Strip(m.trail(width * 4))
+	avail := width - lipgloss.Width(box) - 2
+	if trail == "" || avail < 2 {
+		return box
+	}
+	if over := lipgloss.Width(trail) - avail; over > 0 {
+		trail = ansi.TruncateLeft(trail, over+1, "…")
+	}
+	return box + strings.Repeat(" ", width-lipgloss.Width(box)-lipgloss.Width(trail)) + dimmed.Render(trail)
 }
 
 // trail names the profiles hopped through, oldest first, ending in bold
 // with the one on screen or loading. It keeps the newest that fit.
-func (m Model) trail() string {
+func (m Model) trail(width int) string {
 	s := m.state
 	var logins []string
 	add := func(login string) {
@@ -545,7 +612,7 @@ func (m Model) trail() string {
 	if s.User.Login != "" || m.pendingLogin != "" {
 		current, logins = logins[len(logins)-1], logins[:len(logins)-1]
 	}
-	width := max(0, s.Layout.ContentWidth-state.RightSlack)
+	width = max(0, width)
 	if current != "" && len(logins) == 0 {
 		return styles.Bold.Render(text.Ellipsize(current, width))
 	}
@@ -574,30 +641,17 @@ func (m Model) trail() string {
 	return ansi.Truncate(render([]string{"…"}), width, "…")
 }
 
-// loadingOver shows a spinner and label where content is about to be
-// replaced. What is on screen stays, dimmed, under the label; with nothing
-// on screen the label sits in an empty area.
-func (m Model) loadingOver(content, label string) string {
-	s := m.state
-	width := max(0, s.Layout.ContentWidth-state.RightSlack)
-	label = text.Ellipsize(label, max(0, width-2))
-	spinner := m.loading.View(label)
-	line := strings.Repeat(" ", max(0, (width-lipgloss.Width(spinner))/2)) + spinner
-
+// dim fades what is on screen while a slow request is out to replace it,
+// or blanks it when there is no profile to keep: a failed search's
+// message, or an empty screen.
+func (m Model) dim(content string) string {
 	lines := strings.Split(content, "\n")
-	if s.User.Login == "" {
-		// nothing to keep: a failed search's message, or an empty screen
-		lines = make([]string, len(lines))
-		if len(lines) > 0 {
-			lines[len(lines)/3] = line
-		}
-		return strings.Join(lines, "\n")
-	}
 	for i, l := range lines {
-		lines[i] = dimmed.Render(ansi.Strip(l))
-	}
-	if len(lines) > 0 {
-		lines[0] = line
+		if m.state.User.Login == "" {
+			lines[i] = ""
+		} else {
+			lines[i] = dimmed.Render(ansi.Strip(l))
+		}
 	}
 	return strings.Join(lines, "\n")
 }

@@ -1,9 +1,10 @@
-// Package loading animates the spinner shown where a request's answer will
-// appear, while the request is out on the network.
+// Package loading animates the spinner shown while a request is out on the
+// network.
 package loading
 
 import (
 	"slices"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -19,9 +20,14 @@ type Model struct {
 }
 
 func New() Model {
+	dot := spinner.Dot
+	dot.Frames = make([]string, len(spinner.Dot.Frames))
+	for i, f := range spinner.Dot.Frames {
+		dot.Frames[i] = strings.TrimRight(f, " ")
+	}
 	return Model{
 		spinner: spinner.New(
-			spinner.WithSpinner(spinner.Dot),
+			spinner.WithSpinner(dot),
 			spinner.WithStyle(lipgloss.NewStyle().Foreground(styles.Spinner)),
 		),
 	}
@@ -66,8 +72,12 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, nil
 }
 
-// View renders the spinner and label. Each frame of the dot spinner ends
-// in a space, which separates the two.
+// View renders the spinner and label, a space apart.
 func (m Model) View(label string) string {
-	return m.spinner.View() + styles.Muted().Render(label)
+	return m.spinner.View() + " " + styles.Muted().Render(label)
+}
+
+// Spinner renders the spinner alone, one cell wide.
+func (m Model) Spinner() string {
+	return m.spinner.View()
 }

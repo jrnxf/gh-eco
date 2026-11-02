@@ -63,14 +63,14 @@ func (m Model) collectHelpBindings() []key.Binding {
 		if s.User.Login == "" {
 			// loading, or the search failed
 			bindings = append(bindings, k.FocusInput)
-			if len(s.History) > 0 {
+			if s.Backable {
 				bindings = append(bindings, k.Back)
 			}
 		} else {
 			switch s.CurrentView {
 			case state.UserView:
 				bindings = append(bindings, k.FocusInput, k.FocusNext, k.FocusPrev)
-				if len(s.History) > 0 {
+				if s.Backable {
 					bindings = append(bindings, k.Back)
 				}
 				switch s.Focused().Kind {
@@ -86,10 +86,7 @@ func (m Model) collectHelpBindings() []key.Binding {
 			case state.PeopleView:
 				bindings = append(bindings, k.FocusNext, k.FocusPrev, k.OpenProfile, k.Back, k.OpenGithub, k.FocusInput)
 			case state.ReadmeView:
-				bindings = append(bindings, k.FocusNext, k.FocusPrev, k.PreviewPageDown, k.PreviewPageUp, k.ToggleReadme)
-				if len(s.History) > 0 {
-					bindings = append(bindings, k.Back)
-				}
+				bindings = append(bindings, k.FocusNext, k.FocusPrev, k.PreviewPageDown, k.PreviewPageUp, k.ToggleReadme, k.Back, k.FocusInput)
 				if s.Focused().Kind == state.RepoTarget {
 					// a profile readme has no repo to star
 					bindings = append(bindings, k.StarRepo)
@@ -99,7 +96,9 @@ func (m Model) collectHelpBindings() []key.Binding {
 			bindings = append(bindings, k.StarGhEco)
 		}
 	}
-	bindings = append(bindings, k.Quit)
-
-	return bindings
+	if s.Mode == state.NormalMode && s.Backable {
+		// esc goes back here, so q is the way out
+		return append(bindings, k.QuitKey)
+	}
+	return append(bindings, k.Quit)
 }

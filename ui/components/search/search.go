@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/jrnxf/gh-eco/ui/commands"
 	"github.com/jrnxf/gh-eco/ui/keys"
 	"github.com/jrnxf/gh-eco/ui/state"
@@ -59,7 +60,12 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			}
 
 		case state.NormalMode:
-			if key.Matches(msg, m.keys.FocusInput) && m.state.CurrentView != state.ReadmeView {
+			if key.Matches(msg, m.keys.FocusInput) {
+				if m.state.CurrentView == state.ReadmeView {
+					// the readme has no search row; the search opens on its
+					// profile, which esc returns to
+					m.state.CurrentView = state.UserView
+				}
 				m.prev = m.textInput.Value()
 				m.textInput.Reset()
 				m.state.Mode = state.InsertMode
@@ -84,6 +90,16 @@ func (m *Model) SetLogin(login string) {
 	}
 }
 
-func (m Model) View() string {
+// View is the box on one row of at most width cells. A long search scrolls
+// to keep the cursor in sight.
+func (m Model) View(width int) string {
+	if v := m.textInput.View(); lipgloss.Width(v) <= width {
+		return v
+	}
+	// the prompt takes 2 cells and the cursor 1
+	m.textInput.Width = max(1, width-3)
+	pos := m.textInput.Position()
+	m.textInput.CursorEnd()
+	m.textInput.SetCursor(pos)
 	return m.textInput.View()
 }

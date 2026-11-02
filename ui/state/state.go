@@ -91,6 +91,9 @@ type State struct {
 	// LookedUp is set once any profile was looked up. From then on a
 	// search can be cancelled, returning to what was on screen.
 	LookedUp bool
+	// Backable is set while backspace or esc has a layer to close; esc
+	// quits otherwise.
+	Backable bool
 	// Focus indexes Targets().
 	Focus int
 	// People is the list PeopleView shows.
